@@ -9,6 +9,7 @@
   ・途中保存：入力が止まって3秒たつと自動で保存。「途中保存」ボタンでもすぐに保存できます
   ・提出：提出すると編集できなくなります（管理者が差し戻すと、また編集できます）
   ・管理者は、全社員の勤務表の一覧・閲覧・Excel出力・差し戻しができます
+  ・管理者画面の一覧は、状態（未提出・提出済など）で絞り込み・並べ替えができます
   ・表示中の勤務表をExcelファイル（.xlsx）に出力
   ・表示中の勤務表をPDFファイル（A4縦）に出力
 
@@ -113,6 +114,15 @@
       padding: 6px 8px;
       border: 1px solid #b8c1ca;
       border-radius: 4px;
+    }
+
+    /* 選択欄（管理者画面の絞り込み・並べ替え）。入力欄と同じ見た目にする */
+    .settings select {
+      font-size: 16px;
+      padding: 6px 8px;
+      border: 1px solid #b8c1ca;
+      border-radius: 4px;
+      background: #fff;
     }
 
     /* 基本設定の入力欄の幅（1段に収まるように調整） */
@@ -328,6 +338,16 @@
     .badge.draft     { background: #fdf2e0; color: #b9770e; }
     .badge.submitted { background: #e3f4ea; color: #217346; }
 
+    /* 管理者画面：赤字の日（要確認）がある人の行は、うすい黄色にして目立たせる */
+    tr.needs-check td {
+      background: #fff8d6;
+    }
+
+    /* 「◯人を表示中」の欄 */
+    #adminCount {
+      margin: 8px 0 0;
+    }
+
     /* PDF出力用の勤務表（画面の外に置いて、見えないようにしておく）
        幅 794px は、A4用紙の横幅とほぼ同じ比率です */
     #pdfArea {
@@ -521,10 +541,31 @@
             対象年月
             <input type="month" id="adminMonth">
           </label>
+          <!-- 絞り込みと並べ替え（読み込み済みの一覧を表示し直すだけで、データベースは読み直しません） -->
+          <label>
+            絞り込み
+            <select id="adminFilter">
+              <option value="all">すべて</option>
+              <option value="unsubmitted">未提出のみ</option>
+              <option value="none">未作成のみ</option>
+              <option value="draft">作成中のみ</option>
+              <option value="submitted">提出済のみ</option>
+            </select>
+          </label>
+          <label>
+            並べ替え
+            <select id="adminSort">
+              <option value="name">氏名順</option>
+              <option value="status">状態順</option>
+              <option value="updated">最終更新が古い順</option>
+            </select>
+          </label>
           <button id="adminReloadButton">表示を更新</button>
           <button id="adminExportAllButton" class="excel">全員分をExcel出力</button>
         </div>
         <div id="adminMessage" class="message"></div>
+        <!-- 絞り込み中に「◯人を表示中」と出す欄 -->
+        <div id="adminCount" class="note"></div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -1639,25 +1680,80 @@
       });
       renderAdmin();
 
-      const submitted = adminList.filter(a => a.sheet && a.sheet.status === "submitted").length;
-      showMessage(year + "年" + month + "月：社員 " + adminList.length + "人のうち、提出済 " + submitted + "人", false, "adminMessage");
+      const submitted = adminList.filter(a => statusOf(a) === "submitted").length;
+      showMessage(year + "年" + month + "月：社員 " + adminList.length + "人のうち、提出済 " + submitted + "人・未提出 " + (adminList.length - submitted) + "人", false, "adminMessage");
+    }
+
+    // 1人分の状態（"none" ＝ 未作成、"draft" ＝ 作成中、"submitted" ＝ 提出済）
+    function statusOf(a) {
+      return a.sheet ? a.sheet.status : "none";
+    }
+
+    // 「状態順」で並べるときの順番（数字が小さいほど上）
+    const STATUS_ORDER = { none: 0, draft: 1, submitted: 2 };
+
+    // 絞り込み・並べ替えをした「表示用の一覧」を作る
+    // adminList そのものは並べ替えません（ボタンを押したときに、別の人を選んでしまわないように）
+    function visibleAdminList() {
+      const filter = $("adminFilter").value;
+      const sort = $("adminSort").value;
+
+      // 絞り込み
+      const list = adminList.filter(function (a) {
+        const status = statusOf(a);
+        if (filter === "all") return true;
+        if (filter === "unsubmitted") return status !== "submitted";
+        return status === filter;  // "none"・"draft"・"submitted" のどれか
+      });
+
+      // 並べ替え（adminList は氏名順に読み込んであるので、同じ順位どうしは元の順番＝氏名順のまま残ります）
+      const nameOrder = new Map(adminList.map((a, i) => [a, i]));
+      list.sort(function (x, y) {
+        if (sort === "status") {
+          const diff = STATUS_ORDER[statusOf(x)] - STATUS_ORDER[statusOf(y)];
+          if (diff !== 0) return diff;
+        } else if (sort === "updated") {
+          // 勤務表のない人を先頭に、そのあとは最終更新が古い順
+          if (!x.sheet !== !y.sheet) return x.sheet ? 1 : -1;
+          if (x.sheet && y.sheet) {
+            const diff = new Date(x.sheet.updated_at) - new Date(y.sheet.updated_at);
+            if (diff !== 0) return diff;
+          }
+        }
+        return nameOrder.get(x) - nameOrder.get(y);
+      });
+      return list;
     }
 
     // 一覧の表を書き出す
     function renderAdmin() {
       const body = $("adminBody");
+      const list = visibleAdminList();
+
+      // 絞り込み中は「◯人を表示中」と出す
+      $("adminCount").textContent = ($("adminFilter").value !== "all" && adminList.length > 0)
+        ? adminList.length + "人中 " + list.length + "人を表示中"
+        : "";
+
       if (adminList.length === 0) {
         body.innerHTML = '<tr><td colspan="9" class="empty">社員が登録されていません。</td></tr>';
         return;
       }
-      body.innerHTML = adminList.map(function (a, i) {
+      if (list.length === 0) {
+        body.innerHTML = '<tr><td colspan="9" class="empty">条件に合う社員はいません。</td></tr>';
+        return;
+      }
+      body.innerHTML = list.map(function (a) {
         const sheet = a.sheet;
-        const status = sheet ? sheet.status : "none";
+        const status = statusOf(a);
+        // ボタンには「社員のid」を付けておき、押されたときに id で社員を探します（表示順が変わっても大丈夫なように）
+        const id = escapeHtml(a.person.id);
         let cells = "<td>－</td><td>－</td><td>－</td><td>－</td><td>－</td>";
         let actions = "";
+        let errors = 0;
         if (sheet) {
           const s = countSummary(sheet.rows);
-          const errors = findErrorDays(sheet.rows).length;
+          errors = findErrorDays(sheet.rows).length;
           cells =
             "<td>" + minutesToText(totalWorkMinutes(sheet.rows)) + (errors > 0 ? '<br><span class="badge draft">要確認 ' + errors + "件</span>" : "") + "</td>" +
             "<td>" + s.workDays + "日</td>" +
@@ -1665,11 +1761,12 @@
             "<td>" + s.absentDays + "日</td>" +
             "<td>" + formatDateTime(sheet.updated_at) + "</td>";
           actions =
-            '<button class="small" data-action="view" data-index="' + i + '">表示</button>' +
-            '<button class="small excel" data-action="excel" data-index="' + i + '">Excel</button>' +
-            (status === "submitted" ? '<button class="small gray" data-action="reopen" data-index="' + i + '">差し戻し</button>' : "");
+            '<button class="small" data-action="view" data-id="' + id + '">表示</button>' +
+            '<button class="small excel" data-action="excel" data-id="' + id + '">Excel</button>' +
+            (status === "submitted" ? '<button class="small gray" data-action="reopen" data-id="' + id + '">差し戻し</button>' : "");
         }
-        return "<tr>" +
+        // 赤字の日（要確認）がある人の行は、うすい黄色にする
+        return (errors > 0 ? '<tr class="needs-check">' : "<tr>") +
           "<td>" + escapeHtml(a.person.full_name) + "</td>" +
           "<td>" + escapeHtml(a.person.email || "") + "</td>" +
           '<td><span class="badge ' + status + '">' + STATUS_LABEL[status] + "</span></td>" +
@@ -1683,7 +1780,9 @@
     $("adminBody").addEventListener("click", function (e) {
       const button = e.target.closest("button[data-action]");
       if (!button) return;
-      const a = adminList[Number(button.dataset.index)];
+      // ボタンに付けた社員の id で、どの人かを探す
+      const a = adminList.find(item => item.person.id === button.dataset.id);
+      if (!a) return;
       if (button.dataset.action === "view") showAdminDetail(a);
       if (button.dataset.action === "excel") exportOne(a);
       if (button.dataset.action === "reopen") reopenSheet(a);
@@ -1926,6 +2025,9 @@
     $("adminReloadButton").addEventListener("click", loadAdmin);
     $("adminMonth").addEventListener("change", loadAdmin);
     $("adminExportAllButton").addEventListener("click", exportAll);
+    // 絞り込み・並べ替えを変えたら、読み込み済みの一覧で表を作り直す（データベースは読み直さない）
+    $("adminFilter").addEventListener("change", renderAdmin);
+    $("adminSort").addEventListener("change", renderAdmin);
   </script>
 
   <!--
