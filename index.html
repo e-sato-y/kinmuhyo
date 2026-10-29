@@ -5,12 +5,12 @@
   ・社員ごとにメールアドレスとパスワードでログインし、自分の勤務表だけを作成・修正
   ・対象年月・基本の勤務時間を設定し、1ヶ月分の勤務表を自動で作成（土日祝日は休日）
   ・日ごとの勤務区分（出勤・午前休・午後休・休日・有給休暇・欠勤）、時刻、備考を修正
-  ・実働時間と集計（実働時間の合計・月間勤務日数・有給休暇取得日数・欠勤日数）を自動計算
+  ・実働時間と集計（実働時間の合計・勤務日数・有給休暇・欠勤）を自動計算
   ・途中保存：入力が止まって3秒たつと自動で保存。「途中保存」ボタンでもすぐに保存できます
   ・提出：提出すると編集できなくなります（管理者が差し戻すと、また編集できます）
-  ・管理者は、全社員の勤務表の一覧・閲覧・Excel出力・差し戻しができます
-  ・表示中の勤務表をExcelファイル（.xlsx）に出力
-  ・表示中の勤務表をPDFファイル（A4縦）に出力
+  ・管理者は、全社員の提出状況の確認・絞り込み・検索・閲覧・Excel出力・差し戻しができます
+  ・表示中の勤務表をExcelファイル（.xlsx）・PDFファイル（A4縦）に出力
+  ・パソコンとスマホのどちらでも使えます（画面の幅に合わせて配置が変わります）
 
   保存先はインターネット上のデータベース「Supabase」です。
   接続先の設定は config.js に書きます（README.md の手順を参照）。
@@ -24,6 +24,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <!-- スマホでも画面の幅に合わせて表示する（拡大・縮小の操作はそのままできます） -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>月間勤務表</title>
 
@@ -39,294 +40,967 @@
   <style>
     /* ===== CSS：見た目の設定 ===== */
 
-    /* ページ全体：文字の種類、背景色、余白 */
-    body {
-      font-family: "Yu Gothic UI", "Meiryo", sans-serif;
-      background: #f4f6f8;
-      color: #222;
-      margin: 0;
-      padding: 24px;
+    /* よく使う色に名前を付けておく（ここを変えると、サイト全体の色が変わります） */
+    :root {
+      --navy: #2f5d8a;         /* 基調色（紺） */
+      --navy-dark: #244b70;    /* 紺の濃い色（ボタンを押したときなど） */
+      --navy-light: #e6eef7;   /* 紺のうすい色（選択中の背景など） */
+      --ink: #1b2a3f;          /* 見出しの文字色 */
+      --text: #273444;         /* ふつうの文字色 */
+      --muted: #5f6b7a;        /* 補足の文字色（灰色） */
+      --line: #d7dee7;         /* 罫線 */
+      --line-strong: #c3ccd7;  /* 入力欄の枠線 */
+      --bg: #f2f5f8;           /* ページの背景（うすいグレー） */
+      --panel: #ffffff;        /* 白いパネル */
+      --excel: #217346;        /* Excel出力の緑 */
+      --excel-light: #e7f3ec;
+      --sat-bg: #eaf2fc;       /* 土曜の行（うすい青） */
+      --sat-text: #2a62b0;
+      --sun-bg: #fdeeee;       /* 日曜・祝日の行（うすい赤） */
+      --sun-text: #c62828;
+      --warn: #e8960c;         /* 要確認（オレンジ） */
+      --warn-light: #fff4dc;
+      --error: #c0392b;        /* エラー（赤） */
+      --radius: 6px;           /* 角の丸み（控えめ） */
     }
 
-    h1 {
-      font-size: 24px;
-      margin: 0 0 16px;
+    * { box-sizing: border-box; }
+
+    /* ページ全体：文字の種類、背景色 */
+    body {
+      margin: 0;
+      font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    /* 数字の幅をそろえる（時刻や合計が縦にきれいに並ぶように） */
+    .num,
+    table,
+    input {
+      font-variant-numeric: tabular-nums;
     }
 
     /* 隠しておく部品 */
-    .hidden {
-      display: none !important;
-    }
+    .hidden { display: none !important; }
 
-    /* 白い四角の枠（カード） */
-    .card {
+    h1, h2, h3 { color: var(--ink); margin: 0; }
+
+    /* ===== 画面上部の帯（ヘッダー） ===== */
+    .site-header {
       background: #fff;
-      border: 1px solid #dde2e7;
-      border-radius: 8px;
-      padding: 16px 20px;
-      margin-bottom: 16px;
-      max-width: 960px;
+      border-bottom: 1px solid var(--line);
     }
-
-    /* ログイン画面などの細いカード */
-    .card.narrow {
-      max-width: 400px;
-    }
-
-    .card h2 {
-      font-size: 16px;
-      margin: 0 0 12px;
-      color: #2f5d8a;
-    }
-
-    .note {
-      font-size: 14px;
-      color: #555;
-      margin: 0 0 12px;
-    }
-
-    /* 入力欄を横に並べる */
-    .settings {
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 32px;
+      height: 60px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
-      align-items: flex-end;
+      align-items: center;
+      gap: 32px;
     }
-
-    .settings label,
-    .stack label {
+    .brand {
       display: flex;
-      flex-direction: column;
-      font-size: 14px;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .brand svg { color: var(--navy); }
+
+    /* タブ（自分の勤務表・管理者） */
+    .tabs {
+      display: flex;
+      align-self: stretch;
       gap: 4px;
     }
-
-    /* 入力欄を縦に並べる（ログイン画面） */
-    .stack {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    input {
-      font-size: 16px;
-      padding: 6px 8px;
-      border: 1px solid #b8c1ca;
-      border-radius: 4px;
-    }
-
-    /* 基本設定の入力欄の幅（1段に収まるように調整） */
-    #employeeName { width: 150px; }
-    #breakMinutes { width: 80px; }
-
-    /* ボタン */
-    .buttons {
-      margin-top: 16px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    button {
-      font-size: 15px;
-      padding: 10px 20px;
+    .tab {
       border: none;
-      border-radius: 6px;
+      background: none;
+      font: inherit;
+      font-size: 15px;
+      color: var(--text);
+      padding: 0 18px;
       cursor: pointer;
-      color: #fff;
-      background: #2f5d8a;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--navy); }
+    .tab.active {
+      color: var(--navy);
+      font-weight: 700;
+      border-bottom-color: var(--navy);
     }
 
-    #saveButton   { background: #5b7fa6; }
-    #submitButton { background: #d68910; }
-    button.excel  { background: #217346; }  /* Excelらしい緑色 */
-    button.pdf    { background: #b03a2e; }  /* PDFらしい赤色 */
-    button.gray   { background: #7f8c8d; }
-    button:hover  { opacity: 0.85; }
+    /* ログイン中のメールアドレスとログアウト */
+    .user-box {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 14px;
+    }
+    .user-box .sep {
+      width: 1px;
+      height: 20px;
+      background: var(--line);
+    }
+    #userEmail { color: var(--text); }
+
+    /* ===== ボタン ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 0 20px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: var(--radius);
+      border: 1px solid var(--navy);
+      cursor: pointer;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    /* 塗りつぶしのボタン（いちばん大事な操作） */
+    .btn-primary { background: var(--navy); color: #fff; }
+    .btn-primary:hover { background: var(--navy-dark); }
+    /* 枠線だけのボタン（ふつうの操作） */
+    .btn-outline { background: #fff; color: var(--navy); }
+    .btn-outline:hover { background: var(--navy-light); }
+    /* Excel出力（緑） */
+    .btn-excel { background: #fff; color: var(--excel); border-color: var(--excel); }
+    .btn-excel:hover { background: var(--excel-light); }
+    /* 灰色の枠線ボタン（差し戻しなど） */
+    .btn-gray { background: #fff; color: #555; border-color: #b9c1cb; }
+    .btn-gray:hover { background: #f1f3f5; }
+    /* 小さいボタン（一覧の中） */
+    .btn-small { min-height: 34px; padding: 0 14px; font-size: 14px; }
+    .btn-block { width: 100%; }
 
     /* 押せない状態のボタン */
-    button:disabled {
-      opacity: 0.4;
+    .btn:disabled {
+      background: #eef1f4;
+      color: #9aa4af;
+      border-color: #d5dbe2;
       cursor: not-allowed;
     }
 
     /* 文字だけのボタン（リンクのような見た目） */
-    button.link-button {
+    .text-button {
+      border: none;
       background: none;
-      color: #2f5d8a;
       padding: 0;
-      margin-top: 12px;
-      font-size: 14px;
-      text-decoration: underline;
+      font: inherit;
+      color: var(--navy);
+      cursor: pointer;
     }
+    .text-button.underline { text-decoration: underline; }
 
-    /* 表の中の小さなボタン（管理者画面） */
-    button.small {
-      font-size: 13px;
-      padding: 4px 10px;
-      margin: 2px;
-    }
-
-    /* 画面上部の帯（タブとログアウト） */
-    .topbar {
-      max-width: 960px;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
+    /* Excel のしるし（緑の四角に「X」） */
+    .xl-icon {
+      display: inline-flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 8px;
-    }
-
-    .tabs button {
-      background: #fff;
-      color: #2f5d8a;
-      border: 1px solid #2f5d8a;
-    }
-
-    .tabs button.active {
-      background: #2f5d8a;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      background: var(--excel);
       color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: Arial, sans-serif;
+    }
+    .btn:disabled .xl-icon { background: #b8c0c8; }
+
+    /* ===== 入力欄 ===== */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+      min-width: 0;
+    }
+    .input,
+    .select {
+      width: 100%;
+      min-width: 0;
+      height: 42px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text);
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+    }
+    .input:focus,
+    .select:focus,
+    .sheet input:focus,
+    .sheet select:focus {
+      outline: 2px solid rgba(47, 93, 138, 0.35);
+      outline-offset: 0;
+      border-color: var(--navy);
+    }
+    .input:disabled,
+    .select:disabled {
+      background: #f1f3f6;
+      color: #8a949f;
     }
 
-    .user-box {
+    /* プルダウンの右の「∨」印（ブラウザーの標準の印の代わりに、小さな印を使う） */
+    .select,
+    .sheet select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23445566' stroke-width='1.6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 11px 8px;
+      padding-right: 30px;
+    }
+
+    /* 「分」などの単位を、入力欄の右にくっつけて表示する */
+    .input-unit {
+      display: flex;
+      min-width: 0;
+    }
+    .input-unit .input {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+    .input-unit .unit {
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-size: 14px;
-      color: #555;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-left: none;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      background: #f5f7f9;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    /* パスワード欄の「目」のボタン（押すと文字が見える） */
+    .password-wrap { position: relative; }
+    .password-wrap .input { padding-right: 48px; }
+    .eye-button {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 36px;
+      border: none;
+      background: none;
+      color: #5b6878;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ===== 共通の部品 ===== */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 32px 48px;
+    }
+
+    /* 白いパネル */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
     }
 
     /* 操作結果のメッセージ */
     .message {
-      margin-top: 12px;
       font-size: 14px;
-      color: #555;
-      min-height: 1em;
+      color: var(--muted);
+      min-height: 0;
+      margin: 8px 0;
+    }
+    .message:empty { margin: 0; }
+    .message.error { color: var(--error); font-weight: 700; }
+    .message.ok { color: var(--excel); }
+
+    /* 小さい補足（i のしるし付き） */
+    .hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .info-icon {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1.5px solid currentColor;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      font-style: normal;
+      font-family: Georgia, serif;
     }
 
-    .message.error {
-      color: #c0392b;  /* エラーのときは赤字 */
+    /* 状態のしるし（未作成・作成中・提出済み） */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge.none      { background: #e9edf1; color: #5f6b7a; }
+    .badge.draft     { background: #dce9f7; color: var(--navy); }
+    .badge.submitted { background: #dcf0e4; color: var(--excel); }
+    .badge.readonly  { background: #dce9f7; color: var(--navy); font-size: 12px; padding: 2px 10px; }
+
+    /* 要確認（計算できない日がある）のしるし */
+    .warn-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 8px;
+      border-radius: 4px;
+      background: var(--warn-light);
+      color: #b06d00;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .warn-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--warn);
+      flex: none;
+    }
+
+    /* ===== ログイン画面・パスワード設定画面 ===== */
+    .auth-page {
+      min-height: calc(100vh - 61px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 72px 16px 24px;
+      background: linear-gradient(180deg, #f6f9fc 0%, #eef3f8 100%);
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 540px;
+      padding: 44px 40px 36px;
+      box-shadow: 0 4px 18px rgba(30, 50, 80, 0.06);
+    }
+    .auth-card h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .auth-lead {
+      color: var(--muted);
+      margin: 0 0 28px;
+    }
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .auth-form .btn { min-height: 50px; font-size: 16px; }
+    .field-help {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .auth-divider {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 28px 0 20px;
+    }
+    .auth-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .center { text-align: center; }
+    .lock-circle {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--navy-light);
+      color: var(--navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .info-box {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 14px 18px;
+      background: #f2f6fa;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 24px;
+    }
+    .auth-footer {
+      margin-top: auto;
+      padding-top: 48px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    /* ===== 自分の勤務表 ===== */
+
+    /* ページの見出し（年月・状態・保存状態） */
+    .page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .eyebrow {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 2px;
+    }
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .title-row h1 {
+      font-size: 34px;
+      line-height: 1.2;
+      letter-spacing: 0.01em;
     }
 
     /* 保存の状態（保存済み・未保存など） */
-    #saveStatus {
-      margin-top: 12px;
+    .save-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text);
+      min-height: 24px;
+    }
+    .save-status:empty { display: none; }
+    .save-status::before {
+      /* 状態ごとの丸いしるし */
+      content: "";
+      flex: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #b8c2cc;
+    }
+    /* 保存済み：紺の丸にチェック */
+    .save-status.saved::before {
+      background: var(--navy) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='10' viewBox='0 0 12 10'%3E%3Cpath d='M1 5l3.5 3.5L11 1.5' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E") center / 11px no-repeat;
+    }
+    /* 提出済み：緑の丸にチェック */
+    .save-status.submitted { color: var(--excel); font-weight: 700; }
+    .save-status.submitted::before {
+      background: var(--excel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='10' viewBox='0 0 12 10'%3E%3Cpath d='M1 5l3.5 3.5L11 1.5' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E") center / 11px no-repeat;
+    }
+    /* 未保存・保存中：オレンジの丸 */
+    .save-status.pending { color: #9a5d00; }
+    .save-status.pending::before { background: var(--warn); width: 12px; height: 12px; }
+    /* 保存できなかった：赤の丸に「!」 */
+    .save-status.error { color: var(--error); font-weight: 700; }
+    .save-status.error::before {
+      background: var(--error) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='12' viewBox='0 0 4 12'%3E%3Cpath d='M2 0v8M2 10v2' stroke='white' stroke-width='2.4'/%3E%3C/svg%3E") center / 4px no-repeat;
+    }
+
+    /* 基本設定のパネル */
+    .settings-panel { padding: 18px 20px 20px; margin-bottom: 24px; }
+    .panel-head {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .panel-head h2 { font-size: 20px; }
+    .panel-head p { margin: 0; font-size: 13px; color: var(--muted); }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: minmax(150px, 1.1fr) minmax(170px, 1.2fr) minmax(130px, 1fr) minmax(130px, 1fr) minmax(120px, 0.8fr) auto;
+      gap: 20px;
+      align-items: end;
+    }
+    .settings-grid .btn { min-height: 42px; }
+    /* スマホで使う「基本設定」の要約（パソコンでは隠す） */
+    .settings-summary { display: none; }
+
+    /* 日ごとの勤務の見出し */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .section-title h2 { font-size: 24px; }
+    .section-title .sub { font-size: 13px; color: var(--muted); }
+
+    /* 操作ボタンの並び（途中保存・Excel出力・PDF出力・提出する） */
+    .action-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .action-bar .btn { min-width: 128px; min-height: 44px; }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    /* 色分けの説明（土曜・日曜祝日） */
+    .legend {
+      display: flex;
+      gap: 16px;
       font-size: 13px;
-      color: #217346;
+      color: var(--muted);
     }
-
-    #saveStatus.pending { color: #d68910; }
-    #saveStatus.error   { color: #c0392b; font-weight: bold; }
-
-    /* 表が画面より広いときは、表だけ横にスクロールできるようにする（スマホ用） */
-    .table-wrap {
-      overflow-x: auto;
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i {
+      width: 26px;
+      height: 16px;
+      border-radius: 3px;
+      display: inline-block;
     }
+    .legend .sat { background: #d6e5f8; }
+    .legend .sun { background: #f9d6d6; }
 
-    /* 勤務表の表 */
-    table {
-      border-collapse: collapse;
-      width: 100%;
+    /* 提出済みのお知らせ */
+    .lock-note {
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      border-radius: var(--radius);
+      background: #e9f5ee;
+      border: 1px solid #bfe0cc;
+      color: #1d5e3a;
       font-size: 14px;
     }
 
-    th, td {
-      border: 1px solid #c9d1d9;
-      padding: 6px 8px;
-      text-align: center;
+    /* ===== 勤務表の表 ===== */
+    .sheet-wrap {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      /* パソコンでは表の中だけを縦にスクロールし、見出しの行を固定する */
+      max-height: min(70vh, 760px);
+      overflow: auto;
     }
+    .sheet {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      font-size: 15px;
+    }
+    /* 列の幅（パソコン） */
+    .sheet col.c-date  { width: 9%; }
+    .sheet col.c-week  { width: 6%; }
+    .sheet col.c-type  { width: 13%; }
+    .sheet col.c-start { width: 11%; }
+    .sheet col.c-end   { width: 11%; }
+    .sheet col.c-break { width: 10%; }
+    .sheet col.c-work  { width: 10%; }
+    .sheet col.c-remark{ width: 30%; }
 
-    th {
-      background: #2f5d8a;
-      color: #fff;
+    .sheet th {
+      position: sticky;  /* 下にスクロールしても見出しが見えるように */
+      top: 0;
+      z-index: 2;
+      background: #eef2f6;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 12px 6px;
+      border-bottom: 1px solid var(--line);
+      text-align: center;
       white-space: nowrap;
     }
-
-    .empty {
-      color: #888;
-      padding: 24px;
+    .sheet td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #e6ebf0;
+      text-align: center;
+      vertical-align: middle;
+      background: #fff;
     }
+    .sheet td + td,
+    .sheet th + th { border-left: 1px solid #e6ebf0; }
+    .sheet tbody tr:last-child td { border-bottom: none; }
+
+    /* 表の中の入力欄・選択欄 */
+    .sheet input,
+    .sheet select {
+      width: 100%;
+      min-width: 0;   /* ブラウザーの標準の最小幅で表がはみ出さないようにする */
+      height: 36px;
+      padding: 0 10px;
+      font: inherit;
+      font-size: 15px;
+      color: var(--text);
+      background-color: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+    }
+    .sheet select { padding-right: 28px; text-align: left; }
+    .sheet input:disabled,
+    .sheet select:disabled {
+      background-color: #f1f3f6;
+      color: #9aa4af;
+      border-color: #dde2e8;
+    }
+    /* 数字の入力欄の上下の矢印を消す（幅を取らないように） */
+    .sheet input[type="number"] { -moz-appearance: textfield; appearance: textfield; text-align: left; }
+    .sheet input[type="number"]::-webkit-inner-spin-button,
+    .sheet input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    /* 休憩の欄（パソコンでは右に「分」を付ける） */
+    .break-wrap { display: flex; min-width: 0; }
+    .break-wrap input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .break-wrap .unit {
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-left: none;
+      border-radius: 0 5px 5px 0;
+      background: #f5f7f9;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .break-wrap input:disabled + .unit { border-color: #dde2e8; color: #a9b2bc; }
+
+    /* 読み取り専用の表（文字だけ） */
+    .cell-text { display: block; }
+    .cell-muted { color: #9aa4af; }
+    .sheet td.col-remark { text-align: left; }
+
+    /* 実働時間 */
+    .work-time { font-weight: 700; color: var(--navy); font-size: 16px; }
+    .work-time.off { color: #9aa4af; font-weight: 400; }
+    /* 計算できない日（赤字で理由を表示） */
+    .work-time.error { color: var(--error); font-size: 13px; line-height: 1.3; }
 
     /* 土曜日の行：うすい青 */
-    tr.saturday td {
-      background: #eaf2fb;
-      color: #1f5fa8;
-    }
-
+    .sheet tr.saturday td { background: var(--sat-bg); }
+    .sheet tr.saturday .col-week { color: var(--sat-text); font-weight: 700; }
     /* 日曜日・祝日の行：うすい赤 */
-    tr.sunday td,
-    tr.holiday td {
-      background: #fdeeee;
-      color: #c0392b;
-    }
+    .sheet tr.sunday td,
+    .sheet tr.holiday td { background: var(--sun-bg); }
+    .sheet tr.sunday .col-week,
+    .sheet tr.holiday .col-week { color: var(--sun-text); font-weight: 700; }
 
-    /* 祝日名（小さめの文字） */
+    /* 祝日名（勤務区分の下に小さく表示） */
     .holiday-name {
       display: block;
-      font-size: 11px;
+      font-size: 12px;
+      color: var(--sun-text);
+      text-align: left;
+      margin-top: 2px;
+      line-height: 1.2;
     }
 
-    /* 表の中の入力欄（少し小さめ） */
-    td input,
-    td select {
-      font-size: 14px;
-      padding: 3px 4px;
-      border: 1px solid #b8c1ca;
-      border-radius: 4px;
+    /* 今日の行（左に紺の線と「今日」のしるし） */
+    .sheet tr.today td { background-color: #f4f8fc; }
+    .sheet tr.today td:first-child { box-shadow: inset 4px 0 0 var(--navy); font-weight: 700; }
+    .today-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--navy);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      vertical-align: 1px;
+    }
+
+    .sheet .empty-row td {
+      padding: 40px 16px;
+      color: var(--muted);
       background: #fff;
     }
 
-    td input[type="number"] {
-      width: 60px;
+    /* 列見出し：パソコンとスマホで文字を変える */
+    .label-short { display: none; }
+
+    /* ===== 月間集計 ===== */
+    .summary-panel {
+      margin-top: 20px;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .summary-title {
+      font-size: 20px;
+      flex: none;
+      padding-right: 24px;
+      border-right: 1px solid var(--line);
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+    }
+    .summary-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 0 24px;
+    }
+    .summary-item + .summary-item { border-left: 1px solid var(--line); }
+    .summary-label { font-size: 14px; color: var(--muted); }
+    .summary-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--navy);
+      line-height: 1.2;
+    }
+    .summary-value small { font-size: 16px; margin-left: 2px; }
+    .summary-sub { font-size: 13px; color: var(--muted); }
+    .after-summary {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
-    /* 入力できない状態の欄（休日の時刻など） */
-    td input:disabled,
-    td select:disabled {
-      background: #f0f0f0;
-      color: #aaa;
+    /* ===== 管理者画面 ===== */
+    .admin-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
     }
-
-    /* 実働時間がおかしいとき（退勤が出勤より前など） */
-    td.error {
-      color: #c0392b;
-      font-weight: bold;
+    .admin-head .title-row { align-items: baseline; }
+    .admin-head .sub { margin: 0; font-size: 14px; color: var(--muted); }
+    .admin-controls {
+      display: flex;
+      gap: 16px;
+      align-items: center;
     }
+    .admin-controls .input { width: 200px; height: 44px; font-size: 17px; }
+    .admin-controls .btn { min-height: 44px; }
 
-    /* 備考の入力欄 */
-    td input.remark {
-      width: 140px;
+    /* 件数（全社員・提出済・作成中・未作成） */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 14px 0;
+      margin-bottom: 20px;
     }
-
-    /* 合計の行 */
-    tfoot td {
-      background: #e8eef5;
-      font-weight: bold;
+    .stat {
+      text-align: center;
+      padding: 0 12px;
     }
+    .stat + .stat { border-left: 1px solid var(--line); }
+    .stat-label { display: block; font-size: 14px; color: var(--muted); }
+    .stat-value { font-size: 26px; font-weight: 700; color: var(--ink); }
+    .stat-value small { font-size: 15px; margin-left: 3px; }
 
-    /* 集計欄の値は左寄せ */
-    tfoot td.summary-value {
-      text-align: left;
-      padding-left: 16px;
+    /* 絞り込み・検索・並べ替え */
+    .filter-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
     }
+    .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 0 20px;
+      font: inherit;
+      font-size: 15px;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .chip:hover { border-color: var(--navy); }
+    .chip.active {
+      background: var(--navy-light);
+      border-color: var(--navy);
+      color: var(--navy);
+      font-weight: 700;
+    }
+    .chip .count { font-variant-numeric: tabular-nums; }
+    .search-sort { display: flex; gap: 12px; flex-wrap: wrap; }
+    .search-box { position: relative; width: 300px; max-width: 100%; }
+    .search-box svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #5b6878;
+    }
+    .search-box .input { padding-left: 40px; }
+    #adminSort { width: 220px; }
 
-    /* 勤務表の状態のしるし（未作成・作成中・提出済） */
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 12px;
+    /* 社員の一覧（パソコンは表） */
+    .admin-table-wrap { overflow: hidden; }
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+    .admin-table th {
+      background: #eef2f6;
+      color: var(--ink);
+      font-size: 14px;
+      padding: 12px 10px;
+      text-align: center;
+      border-bottom: 1px solid var(--line);
       white-space: nowrap;
     }
-    .badge.none      { background: #eee;    color: #777; }
-    .badge.draft     { background: #fdf2e0; color: #b9770e; }
-    .badge.submitted { background: #e3f4ea; color: #217346; }
+    .admin-table th:first-child { text-align: left; padding-left: 20px; }
+    .admin-table td {
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid #e6ebf0;
+    }
+    .admin-table td + td,
+    .admin-table th + th { border-left: 1px solid #e6ebf0; }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table td.person { text-align: left; padding-left: 20px; }
+    .person-name { font-weight: 700; color: var(--ink); display: block; word-break: break-all; }
+    .person-email { font-size: 13px; color: var(--muted); display: block; word-break: break-all; }
+    .status-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .admin-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .admin-table tr.selected td { background: #eef4fb; }
+    .admin-table tr.selected td:first-child { box-shadow: inset 4px 0 0 var(--navy); }
+    .admin-empty { padding: 32px; color: var(--muted); text-align: center; }
+
+    .admin-foot {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 16px;
+      margin: 8px 0 20px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* 社員の一覧（スマホはカード） */
+    .admin-cards { display: none; }
+    .person-card { padding: 16px 18px; }
+    .person-card + .person-card { margin-top: 12px; }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .card-note { font-size: 14px; color: var(--muted); margin: 6px 0 0; }
+    .card-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      margin-top: 8px;
+      text-align: center;
+    }
+    .card-stats div + div { border-left: 1px solid var(--line); }
+    .card-stats span { display: block; font-size: 12px; color: var(--muted); }
+    .card-stats strong { font-size: 18px; color: var(--ink); }
+    .card-stats small { font-size: 12px; margin-left: 1px; }
+    .card-updated { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .card-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .card-actions .btn-gray { grid-column: 1 / -1; }
+
+    /* 「表示」を押した社員の勤務表（閲覧のみ） */
+    .detail { padding: 18px 20px 20px; margin-top: 8px; }
+    .detail-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .detail-head h2 {
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .detail-head p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+    .detail-tools { display: flex; align-items: center; gap: 12px; }
+    .close-button {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #4a5866;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .detail .sheet-wrap { max-height: 520px; }
+    .detail .summary-panel { margin-top: 14px; }
+    .detail-empty {
+      padding: 32px;
+      text-align: center;
+      color: var(--muted);
+      background: #f7f9fb;
+      border-radius: var(--radius);
+    }
+
+    /* スマホだけに出す部品は、広い画面では隠す（パソコンだけの部品は、下のスマホ用の設定で隠します） */
+    @media (min-width: 821px) {
+      .sp-only { display: none !important; }
+    }
 
     /* PDF出力用の勤務表（画面の外に置いて、見えないようにしておく）
        幅 794px は、A4用紙の横幅とほぼ同じ比率です */
@@ -336,54 +1010,232 @@
       top: 0;
       width: 794px;
       padding: 36px 40px;
-      box-sizing: border-box;
       background: #fff;
       color: #222;
       font-family: "Yu Gothic UI", "Meiryo", sans-serif;
     }
-    #pdfArea .pdf-title {
-      font-size: 22px;
-      font-weight: bold;
-      margin: 0 0 10px;
+    #pdfArea table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    #pdfArea th,
+    #pdfArea td {
+      border: 1px solid #c9d1d9;
+      padding: 3px 6px;
+      text-align: center;
     }
+    #pdfArea th { background: #2f5d8a; color: #fff; }
+    #pdfArea tr.saturday td { background: #eaf2fb; color: #1f5fa8; }
+    #pdfArea tr.sunday td,
+    #pdfArea tr.holiday td { background: #fdeeee; color: #c0392b; }
+    #pdfArea .pdf-title { font-size: 22px; font-weight: bold; margin: 0 0 10px; }
     #pdfArea .pdf-info {
       display: flex;
       justify-content: space-between;
       font-size: 13px;
       margin-bottom: 10px;
     }
-    #pdfArea .pdf-name {
-      font-size: 15px;
-      font-weight: bold;
-    }
-    #pdfArea table {
-      font-size: 12px;
-    }
-    #pdfArea th,
-    #pdfArea td {
-      padding: 3px 6px;
-    }
-    #pdfArea td.remark {
-      text-align: left;
-    }
-    #pdfArea .pdf-summary {
-      width: 60%;
-      margin-top: 12px;
-    }
-    #pdfArea .pdf-summary th {
-      background: #e8eef5;
-      color: #222;
-      text-align: left;
-      width: 40%;
-    }
-    #pdfArea .pdf-summary td {
-      text-align: left;
+    #pdfArea .pdf-name { font-size: 15px; font-weight: bold; }
+    #pdfArea td.remark { text-align: left; }
+    #pdfArea .pdf-summary { width: 60%; margin-top: 12px; }
+    #pdfArea .pdf-summary th { background: #e8eef5; color: #222; text-align: left; width: 40%; }
+    #pdfArea .pdf-summary td { text-align: left; }
+
+    /* ============================================================
+       狭い画面（スマホ・幅820px以下）の見た目
+       ============================================================ */
+    @media (max-width: 820px) {
+      body { font-size: 14px; }
+      .pc-only { display: none !important; }
+
+      /* ヘッダー：1段目に「勤務表」とログアウト、2段目にメールアドレス、3段目にタブ */
+      .header-inner {
+        height: auto;
+        padding: 0 16px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+          "brand logout"
+          "email email"
+          "tabs  tabs";
+        gap: 0;
+      }
+      .brand { grid-area: brand; padding: 12px 0 6px; font-size: 21px; }
+      .user-box { display: contents; }
+      .user-box .sep { display: none; }
+      #logoutButton { grid-area: logout; justify-self: end; font-size: 15px; }
+      #userEmail { grid-area: email; font-size: 13px; color: var(--muted); padding-bottom: 4px; word-break: break-all; }
+      .tabs { grid-area: tabs; height: 44px; gap: 0; }
+      .tab { padding: 0 18px; font-size: 15px; }
+
+      .container { padding: 16px 12px 32px; }
+
+      /* ログイン画面など */
+      .auth-page { padding: 24px 16px 16px; min-height: calc(100vh - 57px); }
+      .auth-card { padding: 28px 22px 26px; }
+      .auth-card h1 { font-size: 28px; }
+
+      /* 年月・状態・保存状態 */
+      .page-head { align-items: center; margin-bottom: 12px; gap: 8px; }
+      .eyebrow { display: none; }
+      .title-row { gap: 10px; }
+      .title-row h1 { font-size: 26px; }
+      .save-status { font-size: 13px; }
+
+      /* 基本設定：要約を出し、「変更」を押すと入力欄を開く */
+      .settings-panel { padding: 0; margin-bottom: 16px; }
+      .settings-summary {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border: none;
+        background: none;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        color: var(--text);
+      }
+      .settings-summary strong { display: block; font-size: 16px; color: var(--ink); }
+      .settings-summary .summary-line { font-size: 14px; word-break: break-all; }
+      .settings-summary .change { color: var(--navy); font-weight: 700; white-space: nowrap; }
+      .settings-summary .change::after { content: " ›"; font-size: 18px; }
+      .settings-panel.open .settings-summary .change::after { content: " ∧"; font-size: 13px; }
+      .settings-body { display: none; padding: 0 14px 14px; }
+      .settings-panel.open .settings-body { display: block; }
+      .settings-body .panel-head { display: none; }
+      .settings-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+      .settings-grid .field-name,
+      .settings-grid .field-month,
+      .settings-grid .btn { grid-column: 1 / -1; }
+
+      .section-head { margin-bottom: 6px; }
+      .section-title { gap: 10px; align-items: center; }
+      .section-title h2 { font-size: 20px; }
+      .legend { display: none; }
+      .info-row { margin-bottom: 8px; }
+
+      /* ----- スマホの勤務表：8列を画面の幅に収める（横スクロールなし） ----- */
+      .sheet-wrap {
+        max-height: none;
+        overflow: visible;   /* 表全体はページと一緒に縦にスクロールする */
+        border-radius: 6px;
+      }
+      .sheet { font-size: 11.5px; }
+      /* 列の幅（スマホ）。合計100% */
+      .sheet col.c-date  { width: 11.5%; }
+      .sheet col.c-week  { width: 5.5%; }
+      .sheet col.c-type  { width: 18%; }
+      .sheet col.c-start { width: 13%; }
+      .sheet col.c-end   { width: 13%; }
+      .sheet col.c-break { width: 8.5%; }
+      .sheet col.c-work  { width: 11%; }
+      .sheet col.c-remark{ width: 19.5%; }
+      .sheet th {
+        font-size: 11px;
+        padding: 6px 1px;
+        line-height: 1.2;
+        white-space: normal;
+      }
+      .sheet th small { display: block; font-size: 9.5px; font-weight: 400; color: var(--muted); }
+      .label-long { display: none; }
+      .label-short { display: inline; }
+      .sheet td { padding: 4px 2px; }
+      .sheet input,
+      .sheet select {
+        height: 28px;
+        font-size: 11.5px;
+        padding: 0 2px;
+        border-radius: 4px;
+        text-align: center;
+      }
+      /* 選択欄の「∨」印を小さくして、文字の場所を広げる */
+      .sheet select {
+        padding: 0 9px 0 2px;
+        text-align: left;
+        background-position: right 2px center;
+        background-size: 7px 5px;
+      }
+      /* 時刻の入力欄の時計のしるしなど、幅を取る飾りを消す */
+      .sheet input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
+      .sheet input[type="time"]::-webkit-datetime-edit { padding: 0; }
+      .sheet input[type="time"]::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+      .sheet input[type="number"] { text-align: center; }
+      .break-wrap .unit { display: none; }
+      .break-wrap input { border-radius: 4px; }
+      .work-time { font-size: 12px; }
+      .work-time.error { font-size: 9.5px; line-height: 1.15; word-break: break-all; }
+      .holiday-name { font-size: 9.5px; }
+      .today-badge { display: none; }
+      .sheet tr.today td:first-child { box-shadow: inset 3px 0 0 var(--navy); }
+      .cell-text { font-size: 11.5px; word-break: break-all; }
+
+      /* 月間集計：2列×2段 */
+      .summary-panel { display: block; padding: 6px 14px; margin-top: 16px; }
+      .summary-title { display: none; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .summary-item { padding: 10px 6px 10px 10px; }
+      .summary-item:nth-child(odd) { border-left: none; }
+      .summary-item:nth-child(n+3) { border-top: 1px solid var(--line); }
+      .summary-value { font-size: 24px; }
+
+      /* 操作ボタン：画面の下に固定して並べる */
+      #appView.my-active .action-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        background: #fff;
+        border-top: 1px solid var(--line);
+        box-shadow: 0 -4px 12px rgba(30, 50, 80, 0.06);
+      }
+      .action-bar .btn { min-width: 0; min-height: 46px; padding: 0 6px; font-size: 15px; }
+      .action-bar .pdf-button { display: none; }
+      /* 固定したボタンが最後の行や集計に重ならないように、下に余白をとる */
+      #appView.my-active #myView { padding-bottom: 84px; }
+
+      /* 管理者画面 */
+      .admin-head { display: block; }
+      .admin-head .title-row { display: block; margin-bottom: 12px; }
+      .admin-head h1 { font-size: 26px; }
+      .admin-controls { display: grid; gap: 10px; }
+      .admin-controls .input { width: 100%; }
+      .admin-controls .btn { width: 100%; }
+      .stats { grid-template-columns: 1fr 1fr; padding: 0; }
+      .stat { padding: 10px; }
+      .stat:nth-child(odd) { border-left: none; }
+      .stat:nth-child(n+3) { border-top: 1px solid var(--line); }
+      .stat-value { font-size: 24px; }
+      .filter-row { display: block; }
+      .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+      .chip { padding: 0 4px; gap: 4px; justify-content: center; font-size: 13px; min-height: 40px; }
+      .search-sort { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .search-box { width: auto; }
+      #adminSort { width: 100%; font-size: 13px; padding-left: 8px; }
+      .search-box .input { font-size: 14px; }
+      .admin-table-wrap { display: none; }
+      .admin-cards { display: block; }
+      .admin-foot { justify-content: space-between; }
+      .detail { padding: 14px 10px; }
+      .detail-head { flex-wrap: wrap; }
+      .detail-head > div:first-child { flex: 1 1 100%; }
+      .detail-tools { width: 100%; justify-content: space-between; }
+      .detail-head h2 { font-size: 17px; }
+      .unit-text { display: none; }
+      .detail .sheet-wrap { max-height: none; }
     }
 
-    /* 狭い画面（スマホ）では余白を小さくする */
-    @media (max-width: 600px) {
-      body { padding: 12px; }
-      .card { padding: 12px 14px; }
+    /* とても狭い画面（幅360px以下）では、さらに少し詰める */
+    @media (max-width: 360px) {
+      .container { padding-left: 8px; padding-right: 8px; }
+      .sheet,
+      .sheet input,
+      .sheet select,
+      .cell-text { font-size: 11px; }
     }
   </style>
 </head>
@@ -391,148 +1243,274 @@
 <body>
   <!-- ===== HTML：画面に置く部品 ===== -->
 
-  <h1>勤務表作成ツール</h1>
+  <!-- ===== 画面上部の帯（どの画面でも表示） ===== -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <!-- カレンダーのしるし -->
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="4.5" width="18" height="16.5" rx="2"></rect>
+          <path d="M3 9.5h18M8 2.5v4M16 2.5v4"></path>
+        </svg>
+        <span>勤務表</span>
+      </div>
+      <!-- タブとメールアドレスは、ログインしているときだけ表示します -->
+      <nav class="tabs hidden" id="tabs" aria-label="画面の切り替え">
+        <button type="button" id="myTab" class="tab active">自分の勤務表</button>
+        <!-- 管理者タブは、管理者のときだけ表示されます -->
+        <button type="button" id="adminTab" class="tab hidden">管理者</button>
+      </nav>
+      <div class="user-box hidden" id="userBox">
+        <span id="userEmail"></span>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="logoutButton" class="text-button">ログアウト</button>
+      </div>
+    </div>
+  </header>
 
   <!-- ===== ログイン画面 ===== -->
-  <div id="loginView" class="card narrow hidden">
-    <h2>ログイン</h2>
-    <form id="loginForm" class="stack">
-      <label>
-        メールアドレス
-        <input type="email" id="loginEmail" autocomplete="username" required>
-      </label>
-      <label>
-        パスワード
-        <input type="password" id="loginPassword" autocomplete="current-password" required>
-      </label>
-      <div class="buttons">
-        <button type="submit" id="loginButton">ログイン</button>
-      </div>
-    </form>
-    <button type="button" class="link-button" id="forgotButton">パスワードを忘れた場合</button>
-    <div id="loginMessage" class="message"></div>
-  </div>
+  <main id="loginView" class="auth-page hidden">
+    <div class="panel auth-card">
+      <h1>ログイン</h1>
+      <p class="auth-lead">会社のメールアドレスでログインしてください。</p>
+      <form id="loginForm" class="auth-form" novalidate>
+        <label class="field">
+          メールアドレス
+          <input type="email" id="loginEmail" class="input" autocomplete="username" placeholder="name@example.jp">
+        </label>
+        <div class="field">
+          <label for="loginPassword">パスワード</label>
+          <div class="password-wrap">
+            <input type="password" id="loginPassword" class="input" autocomplete="current-password">
+            <button type="button" class="eye-button" data-target="loginPassword" aria-label="パスワードを表示する"></button>
+          </div>
+        </div>
+        <div id="loginMessage" class="message" role="alert"></div>
+        <button type="submit" id="loginButton" class="btn btn-primary btn-block">ログイン</button>
+      </form>
+      <p class="center" style="margin: 20px 0 0;">
+        <button type="button" class="text-button underline" id="forgotButton">パスワードを忘れた場合</button>
+      </p>
+      <hr class="auth-divider">
+      <p class="auth-note">はじめて利用する方は、招待メールのリンクからパスワードを設定してください。</p>
+    </div>
+    <footer class="auth-footer">月間勤務表</footer>
+  </main>
 
   <!-- ===== パスワード設定画面（招待メール・再設定メールのリンクから開いたとき） ===== -->
-  <div id="passwordView" class="card narrow hidden">
-    <h2>パスワードの設定</h2>
-    <p class="note">新しいパスワードを入力してください（8文字以上）。</p>
-    <form id="passwordForm" class="stack">
-      <label>
-        新しいパスワード
-        <input type="password" id="newPassword" autocomplete="new-password" minlength="8" required>
-      </label>
-      <label>
-        確認のため、もう一度
-        <input type="password" id="newPassword2" autocomplete="new-password" minlength="8" required>
-      </label>
-      <div class="buttons">
-        <button type="submit" id="passwordButton">設定する</button>
+  <main id="passwordView" class="auth-page hidden">
+    <div class="panel auth-card">
+      <div class="lock-circle">
+        <!-- 鍵のしるし -->
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="5" y="10.5" width="14" height="10" rx="2"></rect>
+          <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path>
+        </svg>
       </div>
-    </form>
-    <div id="passwordMessage" class="message"></div>
-  </div>
+      <h1 class="center" style="font-size: 28px;">パスワードの設定</h1>
+      <p class="auth-lead center">新しいパスワードを入力してください。<br>設定後、そのまま勤務表を開きます。</p>
+      <form id="passwordForm" class="auth-form" novalidate>
+        <div class="field">
+          <label for="newPassword">新しいパスワード</label>
+          <div class="password-wrap">
+            <input type="password" id="newPassword" class="input" autocomplete="new-password">
+            <button type="button" class="eye-button" data-target="newPassword" aria-label="パスワードを表示する"></button>
+          </div>
+          <span class="field-help">8文字以上で入力してください。</span>
+        </div>
+        <div class="field">
+          <label for="newPassword2">新しいパスワード（確認）</label>
+          <div class="password-wrap">
+            <input type="password" id="newPassword2" class="input" autocomplete="new-password">
+            <button type="button" class="eye-button" data-target="newPassword2" aria-label="パスワードを表示する"></button>
+          </div>
+        </div>
+        <div id="passwordMessage" class="message" role="alert"></div>
+        <button type="submit" id="passwordButton" class="btn btn-primary btn-block">パスワードを設定する</button>
+      </form>
+      <div class="info-box">
+        <i class="info-icon">i</i>
+        <span>この画面は、招待メールまたは再設定メールのリンクから開けます。</span>
+      </div>
+    </div>
+    <footer class="auth-footer">月間勤務表</footer>
+  </main>
 
   <!-- ===== ログイン後の画面 ===== -->
-  <div id="appView" class="hidden">
-    <div class="topbar">
-      <div class="tabs">
-        <button id="myTab" class="active">自分の勤務表</button>
-        <!-- 管理者タブは、管理者のときだけ表示されます -->
-        <button id="adminTab" class="hidden">管理者</button>
-      </div>
-      <div class="user-box">
-        <span id="userEmail"></span>
-        <button id="logoutButton" class="gray">ログアウト</button>
-      </div>
-    </div>
+  <main id="appView" class="hidden">
+    <div class="container">
 
-    <!-- ----- 自分の勤務表 ----- -->
-    <div id="myView">
-      <!-- 設定エリア -->
-      <div class="card">
-        <h2>基本設定</h2>
-        <div class="settings">
-          <label>
-            氏名
-            <input type="text" id="employeeName" placeholder="例：山田 太郎" maxlength="30">
-          </label>
-          <label>
-            対象年月
-            <input type="month" id="targetMonth">
-          </label>
-          <label>
-            基本出勤時刻
-            <input type="time" id="startTime" value="09:00">
-          </label>
-          <label>
-            基本退勤時刻
-            <input type="time" id="endTime" value="18:00">
-          </label>
-          <label>
-            休憩時間（分）
-            <input type="number" id="breakMinutes" value="60" min="0" step="5">
-          </label>
+      <!-- ----- 自分の勤務表 ----- -->
+      <section id="myView">
+        <!-- 1. 対象年月・状態・保存状態 -->
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">月間勤務表</p>
+            <div class="title-row">
+              <h1 id="myTitle"></h1>
+              <span id="myBadge" class="badge none">未作成</span>
+            </div>
+          </div>
+          <div id="saveStatus" class="save-status" role="status" aria-live="polite"></div>
         </div>
 
-        <div class="buttons">
-          <button id="createButton">勤務表を作成する</button>
-          <button id="saveButton">途中保存</button>
-          <button id="submitButton">提出する</button>
-          <button id="excelButton" class="excel">Excel出力</button>
-          <button id="pdfButton" class="pdf">PDF出力</button>
+        <!-- 2. 基本設定 -->
+        <section class="panel settings-panel" id="settingsPanel">
+          <!-- スマホだけに出る要約。「変更」を押すと下の入力欄が開きます -->
+          <button type="button" class="settings-summary" id="settingsToggle" aria-expanded="false" aria-controls="settingsBody">
+            <span>
+              <strong>基本設定</strong>
+              <span class="summary-line" id="settingsSummary"></span>
+            </span>
+            <span class="change">変更</span>
+          </button>
+          <div class="settings-body" id="settingsBody">
+            <div class="panel-head">
+              <h2>基本設定</h2>
+              <p>基本の勤務時間を設定して、1か月分の勤務表を作成します。</p>
+            </div>
+            <div class="settings-grid">
+              <label class="field field-name">
+                氏名
+                <input type="text" id="employeeName" class="input" placeholder="例：山田 太郎" maxlength="30">
+              </label>
+              <label class="field field-month">
+                対象年月
+                <input type="month" id="targetMonth" class="input">
+              </label>
+              <label class="field">
+                基本出勤時刻
+                <input type="time" id="startTime" class="input" value="09:00">
+              </label>
+              <label class="field">
+                基本退勤時刻
+                <input type="time" id="endTime" class="input" value="18:00">
+              </label>
+              <label class="field">
+                休憩時間
+                <span class="input-unit">
+                  <input type="number" id="breakMinutes" class="input" value="60" min="0" step="5" inputmode="numeric">
+                  <span class="unit">分</span>
+                </span>
+              </label>
+              <button type="button" id="createButton" class="btn btn-outline">勤務表を作成する</button>
+            </div>
+          </div>
+        </section>
+
+        <div id="message" class="message" role="alert"></div>
+
+        <!-- 3. 日ごとの勤務表 -->
+        <section>
+          <div class="section-head">
+            <div class="section-title">
+              <h2>日ごとの勤務</h2>
+              <span class="sub pc-only">勤務区分や時刻は、表の中で変更できます。</span>
+              <span class="sp-only hint"><i class="info-icon">i</i>入力を止めると、3秒後に自動保存します。</span>
+            </div>
+            <!-- 5. 操作ボタン（パソコンはここ、スマホは画面の下に固定して表示します） -->
+            <div class="action-bar" id="actionBar">
+              <button type="button" id="saveButton" class="btn btn-outline">途中保存</button>
+              <button type="button" id="excelButton" class="btn btn-excel"><span class="xl-icon" aria-hidden="true">X</span>Excel出力</button>
+              <button type="button" class="btn btn-outline pdf-button">PDF出力</button>
+              <button type="button" id="submitButton" class="btn btn-primary">提出する</button>
+            </div>
+          </div>
+          <div class="info-row pc-only">
+            <p class="hint"><i class="info-icon">i</i>入力を止めると、3秒後に自動保存します。</p>
+            <div class="legend" aria-hidden="true">
+              <span><i class="sat"></i>土曜</span>
+              <span><i class="sun"></i>日曜・祝日</span>
+            </div>
+          </div>
+          <div id="lockNote" class="lock-note hidden">この月は提出済みのため、編集できません。修正が必要なときは、管理者に差し戻しを依頼してください。</div>
+
+          <div class="sheet-wrap">
+            <table class="sheet" id="mySheet">
+              <colgroup>
+                <col class="c-date"><col class="c-week"><col class="c-type"><col class="c-start">
+                <col class="c-end"><col class="c-break"><col class="c-work"><col class="c-remark">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>日付</th>
+                  <th><span class="label-long">曜日</span><span class="label-short">曜</span></th>
+                  <th><span class="label-long">勤務区分</span><span class="label-short">区分</span></th>
+                  <th><span class="label-long">出勤時刻</span><span class="label-short">出勤</span></th>
+                  <th><span class="label-long">退勤時刻</span><span class="label-short">退勤</span></th>
+                  <th><span class="label-long">休憩時間</span><span class="label-short">休憩<small>分</small></span></th>
+                  <th><span class="label-long">実働時間</span><span class="label-short">実働</span></th>
+                  <th>備考</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 4. 月間集計 -->
+        <section id="mySummary" class="panel summary-panel hidden" aria-label="今月の集計"></section>
+        <div class="after-summary">
+          <p class="hint"><i class="info-icon">i</i>提出後は編集できなくなります。内容を確認してから提出してください。</p>
+          <!-- スマホでは、PDF出力はここに表示します（画面下のボタンは3つに絞っています） -->
+          <button type="button" class="btn btn-outline btn-small pdf-button sp-only">PDF出力</button>
+        </div>
+      </section>
+
+      <!-- ----- 管理者画面 ----- -->
+      <section id="adminView" class="hidden">
+        <div class="admin-head">
+          <div class="title-row">
+            <h1>提出状況の確認</h1>
+            <p class="sub">社員ごとの勤務表を確認・出力できます。</p>
+          </div>
+          <div class="admin-controls">
+            <input type="month" id="adminMonth" class="input" aria-label="対象年月">
+            <button type="button" id="adminExportAllButton" class="btn btn-excel"><span class="xl-icon" aria-hidden="true">X</span>全員分をExcel出力</button>
+          </div>
         </div>
 
-        <div id="saveStatus"></div>
-        <div id="message" class="message"></div>
-      </div>
+        <!-- 件数 -->
+        <div class="panel stats">
+          <div class="stat"><span class="stat-label">全社員</span><span class="stat-value"><span id="statAll">0</span><small>名</small></span></div>
+          <div class="stat"><span class="stat-label">提出済</span><span class="stat-value"><span id="statSubmitted">0</span><small>名</small></span></div>
+          <div class="stat"><span class="stat-label">作成中</span><span class="stat-value"><span id="statDraft">0</span><small>名</small></span></div>
+          <div class="stat"><span class="stat-label">未作成</span><span class="stat-value"><span id="statNone">0</span><small>名</small></span></div>
+        </div>
 
-      <!-- 勤務表エリア -->
-      <div class="card">
-        <h2>勤務表</h2>
-        <div class="table-wrap">
-          <table>
+        <!-- 絞り込み・検索・並べ替え -->
+        <div class="filter-row">
+          <div class="chips" id="adminChips" role="group" aria-label="絞り込み">
+            <button type="button" class="chip active" data-filter="all">すべて <span class="count" id="chipAll">0</span></button>
+            <button type="button" class="chip" data-filter="unsubmitted">未提出 <span class="count" id="chipUnsubmitted">0</span></button>
+            <button type="button" class="chip" data-filter="submitted">提出済 <span class="count" id="chipSubmitted">0</span></button>
+            <button type="button" class="chip" data-filter="check"><span class="warn-dot" aria-hidden="true"></span>要確認 <span class="count" id="chipCheck">0</span></button>
+          </div>
+          <div class="search-sort">
+            <label class="search-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5L21 21"></path>
+              </svg>
+              <input type="search" id="adminSearch" class="input" placeholder="氏名・メールで検索" aria-label="氏名・メールで検索">
+            </label>
+            <select id="adminSort" class="select" aria-label="並べ替え">
+              <option value="unsubmitted">未提出を先に表示</option>
+              <option value="name">氏名順</option>
+              <option value="updated">最終更新が古い順</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="adminMessage" class="message" role="alert"></div>
+
+        <!-- 社員の一覧（パソコン：表） -->
+        <div class="panel admin-table-wrap">
+          <table class="admin-table">
             <thead>
               <tr>
-                <th>日付</th>
-                <th>曜日</th>
-                <th>勤務区分</th>
-                <th>出勤時刻</th>
-                <th>退勤時刻</th>
-                <th>休憩時間</th>
-                <th>実働時間</th>
-                <th>備考</th>
-              </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-            <!-- 合計の行（勤務表を作ると表示されます） -->
-            <tfoot id="tableFoot"></tfoot>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ----- 管理者画面 ----- -->
-    <div id="adminView" class="hidden">
-      <div class="card">
-        <h2>全社員の勤務表</h2>
-        <div class="settings">
-          <label>
-            対象年月
-            <input type="month" id="adminMonth">
-          </label>
-          <button id="adminReloadButton">表示を更新</button>
-          <button id="adminExportAllButton" class="excel">全員分をExcel出力</button>
-        </div>
-        <div id="adminMessage" class="message"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>氏名</th>
-                <th>メールアドレス</th>
+                <th>氏名・メールアドレス</th>
                 <th>状態</th>
-                <th>実働時間の合計</th>
+                <th>実働合計</th>
                 <th>勤務日数</th>
                 <th>有給休暇</th>
                 <th>欠勤</th>
@@ -543,39 +1521,55 @@
             <tbody id="adminBody"></tbody>
           </table>
         </div>
-      </div>
+        <!-- 社員の一覧（スマホ：カード） -->
+        <div class="admin-cards" id="adminCards"></div>
 
-      <!-- 「表示」を押した社員の勤務表（読み取り専用） -->
-      <div id="adminDetail" class="card hidden">
-        <h2 id="adminDetailTitle"></h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>日付</th>
-                <th>曜日</th>
-                <th>勤務区分</th>
-                <th>出勤時刻</th>
-                <th>退勤時刻</th>
-                <th>休憩時間</th>
-                <th>実働時間</th>
-                <th>備考</th>
-              </tr>
-            </thead>
-            <tbody id="adminDetailBody"></tbody>
-            <tfoot id="adminDetailFoot"></tfoot>
-          </table>
+        <div class="admin-foot">
+          <span id="adminCount"></span>
+          <button type="button" id="adminMore" class="text-button hidden">さらに表示 ∨</button>
         </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- 備考欄の候補の一覧。候補を増やしたいときは <option> の行を書き足します -->
-  <datalist id="remarkOptions">
-    <option value="在宅勤務">
-    <option value="出張">
-    <option value="休日出勤">
-  </datalist>
+        <!-- 「表示」を押した社員の勤務表（閲覧のみ） -->
+        <section id="adminDetail" class="panel detail hidden">
+          <div class="detail-head">
+            <div>
+              <h2><span id="adminDetailTitle"></span><span class="badge readonly">閲覧のみ</span></h2>
+              <p id="adminDetailSub">内容の編集は本人のみ行えます。</p>
+            </div>
+            <div class="detail-tools">
+              <button type="button" id="adminDetailExcel" class="btn btn-excel btn-small"><span class="xl-icon" aria-hidden="true">X</span>Excel出力</button>
+              <button type="button" id="adminDetailClose" class="close-button" aria-label="閉じる">×</button>
+            </div>
+          </div>
+          <div id="adminDetailEmpty" class="detail-empty hidden">まだ勤務表が作成されていません。</div>
+          <div id="adminDetailSheet">
+            <div class="sheet-wrap">
+              <table class="sheet">
+                <colgroup>
+                  <col class="c-date"><col class="c-week"><col class="c-type"><col class="c-start">
+                  <col class="c-end"><col class="c-break"><col class="c-work"><col class="c-remark">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>日付</th>
+                    <th><span class="label-long">曜日</span><span class="label-short">曜</span></th>
+                    <th><span class="label-long">勤務区分</span><span class="label-short">区分</span></th>
+                    <th><span class="label-long">出勤時刻</span><span class="label-short">出勤</span></th>
+                    <th><span class="label-long">退勤時刻</span><span class="label-short">退勤</span></th>
+                    <th><span class="label-long">休憩時間</span><span class="label-short">休憩<small>分</small></span></th>
+                    <th><span class="label-long">実働時間</span><span class="label-short">実働</span></th>
+                    <th>備考</th>
+                  </tr>
+                </thead>
+                <tbody id="adminDetailBody"></tbody>
+              </table>
+            </div>
+            <section id="adminDetailSummary" class="panel summary-panel" aria-label="この月の集計"></section>
+          </div>
+        </section>
+      </section>
+    </div>
+  </main>
 
   <!-- PDF出力のときだけ、ここに印刷用の勤務表を組み立てます（画面には表示されません） -->
   <div id="pdfArea" aria-hidden="true"></div>
@@ -587,6 +1581,10 @@
     // 曜日の名前（JavaScriptでは日曜日が0番、土曜日が6番）
     const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
+    // 備考の選択肢。「—」（何もなし）は空の文字として保存します。
+    // 選択肢を増やしたいときは、この並びに書き足します（Excelのプルダウンにも反映されます）
+    const REMARK_OPTIONS = ["在宅勤務"];
+
     // 勤務表の中身をしまっておく入れ物（配列）。1日分が1つの要素になります。
     let rows = [];
 
@@ -597,6 +1595,10 @@
     // 表示中の勤務表の状態（null ＝ まだ保存していない、"draft" ＝ 作成中、"submitted" ＝ 提出済）
     let sheetStatus = null;
 
+    // 読み込み中・提出処理中のしるし（このあいだは表を編集できないようにします）
+    let loading = false;
+    let submitting = false;
+
     // ログイン中の人の情報
     let currentUser = null;  // ログインの情報（メールアドレスなど）
     let profile = null;      // 氏名・管理者かどうか・基本時刻
@@ -604,9 +1606,8 @@
     // よく使う部品
     const $ = (id) => document.getElementById(id);
     const myBody = $("tableBody");
-    const myFoot = $("tableFoot");
 
-    // 対象年月の初期値を「今月」にする
+    // 今日の日付と、対象年月の初期値（今月）
     const today = new Date();
     const thisMonth = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0"); // 例："2026-10"
     $("targetMonth").value = thisMonth;
@@ -620,8 +1621,17 @@
       box.className = "message" + (isError ? " error" : "");
     }
 
+    // 画面の部品を作る道具。文字は textContent で入れるので、HTMLとして読まれる心配がありません
+    // 例：el("span", "badge", "作成中") → <span class="badge">作成中</span>
+    function el(tag, className, text) {
+      const e = document.createElement(tag);
+      if (className) e.className = className;
+      if (text !== undefined && text !== null) e.textContent = text;
+      return e;
+    }
+
     // 文字の中の「<」や「&」などを、画面に表示しても崩れない形に変える道具
-    // （氏名などを表に書き出すときに使います）
+    // （PDF用の表を組み立てるときに使います）
     function escapeHtml(text) {
       return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
@@ -719,6 +1729,8 @@
     // 勤務表を作る
     // ------------------------------------------------------------
     function createSchedule() {
+      if (loading || submitting || sheetStatus === "submitted") return;
+
       // 入力欄の値を読み取る
       const target = $("targetMonth").value;      // 例："2026-11"
       const startTime = $("startTime").value;     // 例："09:00"
@@ -738,11 +1750,15 @@
         showMessage("基本退勤時刻は、基本出勤時刻より後の時刻にしてください。", true);
         return;
       }
-      if (isNaN(breakMinutes) || breakMinutes < 0) {
+      if ($("breakMinutes").value === "" || isNaN(breakMinutes) || breakMinutes < 0) {
         showMessage("休憩時間は0以上の数字（分）で入力してください。", true);
         return;
       }
-      // すでに保存してある勤務表を作り直すときは、念のため確認する
+      if (timeToMinutes(endTime) - timeToMinutes(startTime) <= breakMinutes) {
+        showMessage("休憩時間が長すぎます。基本の勤務時間より短くしてください。", true);
+        return;
+      }
+      // すでに作ってある勤務表を作り直すときは、念のため確認する
       if (rows.length > 0 && !confirm("この月の勤務表は作成済みです。いま入力している内容を消して、作り直しますか？")) {
         return;
       }
@@ -764,21 +1780,25 @@
           day: day,
           weekday: weekday,
           holidayName: holidayName,
-          remark: "",  // 備考（最初は空）
           type: isOff ? "休日" : "出勤",
           start: isOff ? "" : startTime,
           end: isOff ? "" : endTime,
-          breakMinutes: isOff ? 0 : breakMinutes
+          breakMinutes: isOff ? 0 : breakMinutes,
+          remark: ""  // 備考（最初は空）
         });
       }
 
       // 表示中の年月と基本設定を覚えておく（勤務区分の変更・保存・Excel出力で使います）
       shown = { year: year, month: month, startTime: startTime, endTime: endTime, breakMinutes: breakMinutes };
 
+      hasRowError = false;
       renderMine();
       markDirty();  // 作った勤務表を保存する
 
       // 基本の勤務時間を、次の月から最初に入る値として覚えておく
+      profile.default_start = startTime;
+      profile.default_end = endTime;
+      profile.default_break = breakMinutes;
       sb.from("profiles")
         .update({ default_start: startTime, default_end: endTime, default_break: breakMinutes })
         .eq("id", currentUser.id)
@@ -786,6 +1806,8 @@
 
       const workDays = rows.filter(r => r.type === "出勤").length;
       showMessage(year + "年" + month + "月の勤務表を作成しました（出勤日 " + workDays + "日）。入力した内容は自動で保存されます。");
+      // スマホでは、作成したら基本設定を閉じて表を見やすくする
+      setSettingsOpen(false);
     }
 
     // ------------------------------------------------------------
@@ -846,77 +1868,246 @@
       }, 0);
     }
 
-    // ------------------------------------------------------------
-    // 勤務表（list）の中身を、画面の表（body と foot）に書き出す
-    // editable が true なら、出勤・退勤・休憩などを入力欄にして、その場で修正できるようにします
-    // false なら読み取り専用です（提出済みの勤務表や、管理者画面）
-    // ------------------------------------------------------------
-    function renderTable(body, foot, list, editable) {
-      body.innerHTML = "";  // いったん表の中身を空にする
-
-      if (list.length === 0) {
-        body.innerHTML = '<tr><td colspan="8" class="empty">「勤務表を作成する」ボタンを押すと、ここに1ヶ月分の勤務表が表示されます。</td></tr>';
-        foot.innerHTML = "";
-        return 0;
-      }
-
-      list.forEach(function (r, index) {
-        const tr = document.createElement("tr");
-
-        // 行の色分け用のしるし（CSSの tr.saturday などと対応）
-        if (r.holidayName) tr.className = "holiday";
-        else if (r.weekday === 0) tr.className = "sunday";
-        else if (r.weekday === 6) tr.className = "saturday";
-
-        // 勤務区分の選択欄（プルダウン）を作る
-        let options = "";
-        for (const t of WORK_TYPES) {
-          options += "<option" + (t === r.type ? " selected" : "") + ">" + t + "</option>";
-        }
-        const holidayText = r.holidayName ? '<span class="holiday-name">' + r.holidayName + "</span>" : "";
-
-        // 読み取り専用のときは、すべての欄を入力できない状態（disabled）にする
-        const locked = editable ? "" : " disabled";
-        // 働かない日（休日・有給休暇・欠勤）は、時刻の欄を入力できない状態にする
-        const off = (!editable || !isWorking(r.type)) ? " disabled" : "";
-
-        tr.innerHTML =
-          "<td>" + r.month + "/" + r.day + "</td>" +
-          "<td>" + WEEKDAYS[r.weekday] + "</td>" +
-          '<td><select data-field="type"' + locked + ">" + options + "</select>" + holidayText + "</td>" +
-          '<td><input type="time" data-field="start" value="' + r.start + '"' + off + "></td>" +
-          '<td><input type="time" data-field="end" value="' + r.end + '"' + off + "></td>" +
-          '<td><input type="number" data-field="breakMinutes" min="0" step="5" value="' + r.breakMinutes + '"' + off + "> 分</td>" +
-          '<td class="work-time"></td>' +
-          // 備考：候補（remarkOptions）から選ぶことも、自由に入力することもできる欄
-          '<td><input type="text" class="remark" data-field="remark" list="remarkOptions" placeholder="選択または入力"' + locked + "></td>";
-
-        // 備考の文字は、あとから入れる（「"」や「<」などの記号が入っても表示が崩れないように）
-        tr.querySelector('[data-field="remark"]').value = r.remark;
-
-        // この行の入力欄が変更されたら、rows の中身を書き換える
-        if (editable) {
-          tr.querySelectorAll("select, input").forEach(function (el) {
-            el.addEventListener("input", function () {
-              updateRow(index, el.dataset.field, el.value);
-            });
-          });
-        }
-
-        body.appendChild(tr);
-      });
-
-      return updateWorkTimes(body, foot, list);
+    // 勤務区分ごとの日数を数える（画面の集計欄・管理者画面・Excel出力で使います）
+    // 有給休暇は1日、午前休・午後休は半日（0.5日）として数えます
+    function countSummary(list) {
+      const count = (type) => list.filter(r => r.type === type).length;
+      const paidFull = count("有給休暇");
+      const halfDays = count("午前休") + count("午後休");
+      return {
+        workDays: list.filter(r => isWorking(r.type)).length,
+        paidFull: paidFull,
+        halfDays: halfDays,
+        paidDays: paidFull + halfDays * 0.5,
+        absentDays: count("欠勤")
+      };
     }
 
-    // 「自分の勤務表」を書き出す（提出済みなら読み取り専用）
+    // ------------------------------------------------------------
+    // 勤務表の表を画面に書き出す
+    // editable が true なら、勤務区分・時刻・備考を入力欄にして、その場で修正できるようにします
+    // false なら文字だけの読み取り専用です（提出済みの勤務表や、管理者画面）
+    // ------------------------------------------------------------
+
+    // 行の色分け用のしるし（CSSの tr.saturday などと対応）
+    function rowClassOf(r) {
+      if (r.holidayName) return "holiday";
+      if (r.weekday === 0) return "sunday";
+      if (r.weekday === 6) return "saturday";
+      return "";
+    }
+
+    // その行が今日かどうか
+    function isTodayRow(year, r) {
+      return year === today.getFullYear() && r.month === today.getMonth() + 1 && r.day === today.getDate();
+    }
+
+    // 備考の選択欄を作る。保存済みの備考が選択肢にないとき（以前に自由入力した文字など）は、
+    // 消さずに選択肢へ足して、そのまま表示します
+    function buildRemarkSelect(value) {
+      const select = el("select");
+      const choices = [""].concat(REMARK_OPTIONS);
+      if (value && !choices.includes(value)) choices.push(value);
+      for (const c of choices) {
+        const option = el("option", null, c === "" ? "—" : c);
+        option.value = c;
+        if (c === (value || "")) option.selected = true;
+        select.append(option);
+      }
+      return select;
+    }
+
+    // 1日分の行（tr）を作る
+    function buildRow(r, index, editable, year) {
+      const tr = el("tr", rowClassOf(r));
+      if (isTodayRow(year, r)) tr.classList.add("today");
+      const dayLabel = r.month + "月" + r.day + "日の";
+      const working = isWorking(r.type);
+
+      // 日付（今日なら「今日」のしるしを付ける）
+      const tdDate = el("td", "col-date num", r.month + "/" + r.day);
+      if (isTodayRow(year, r)) tdDate.append(el("span", "today-badge", "今日"));
+      // 曜日
+      const tdWeek = el("td", "col-week", WEEKDAYS[r.weekday]);
+
+      // 勤務区分（祝日名はその下に小さく表示）
+      const tdType = el("td", "col-type");
+      if (editable) {
+        const select = el("select");
+        select.dataset.field = "type";
+        select.setAttribute("aria-label", dayLabel + "勤務区分");
+        for (const t of WORK_TYPES) {
+          const option = el("option", null, t);
+          option.value = t;
+          if (t === r.type) option.selected = true;
+          select.append(option);
+        }
+        tdType.append(select);
+      } else {
+        tdType.append(el("span", "cell-text", r.type));
+      }
+      if (r.holidayName) tdType.append(el("span", "holiday-name", r.holidayName));
+
+      // 出勤・退勤（働かない日は空にして、入力できない状態にする）
+      function timeCell(field, value, label) {
+        const td = el("td", "col-time");
+        if (!editable) {
+          td.append(working && value ? el("span", "cell-text num", value) : el("span", "cell-text cell-muted", "--:--"));
+          return td;
+        }
+        const input = el("input");
+        input.type = "time";
+        input.dataset.field = field;
+        input.value = working ? value : "";
+        input.disabled = !working;
+        input.setAttribute("aria-label", dayLabel + label);
+        td.append(input);
+        return td;
+      }
+      const tdStart = timeCell("start", r.start, "出勤時刻");
+      const tdEnd = timeCell("end", r.end, "退勤時刻");
+
+      // 休憩（分）
+      const tdBreak = el("td", "col-break");
+      if (editable) {
+        const wrap = el("span", "break-wrap");
+        const input = el("input");
+        input.type = "number";
+        input.min = "0";
+        input.step = "5";
+        input.inputMode = "numeric";
+        input.dataset.field = "breakMinutes";
+        input.value = working ? r.breakMinutes : "";
+        input.placeholder = "--";
+        input.disabled = !working;
+        input.setAttribute("aria-label", dayLabel + "休憩時間（分）");
+        wrap.append(input, el("span", "unit", "分"));
+        tdBreak.append(wrap);
+      } else {
+        if (working) {
+          // 「分」はスマホでは隠す（列の見出しに「分」と書いてあるため）
+          const text = el("span", "cell-text num", String(r.breakMinutes));
+          text.append(el("span", "unit-text", "分"));
+          tdBreak.append(text);
+        } else {
+          tdBreak.append(el("span", "cell-text cell-muted", "--"));
+        }
+      }
+
+      // 実働時間（あとで updateWorkTimes が計算して入れます）
+      const tdWork = el("td", "work-time num");
+
+      // 備考（休日でも選べます）
+      const tdRemark = el("td", "col-remark");
+      if (editable) {
+        const select = buildRemarkSelect(r.remark);
+        select.dataset.field = "remark";
+        select.setAttribute("aria-label", dayLabel + "備考");
+        tdRemark.append(select);
+      } else {
+        tdRemark.append(r.remark ? el("span", "cell-text", r.remark) : el("span", "cell-text cell-muted", "—"));
+      }
+
+      tr.append(tdDate, tdWeek, tdType, tdStart, tdEnd, tdBreak, tdWork, tdRemark);
+
+      // この行の入力欄が変更されたら、rows の中身を書き換える
+      if (editable) {
+        tr.querySelectorAll("select, input").forEach(function (input) {
+          const eventName = input.tagName === "SELECT" ? "change" : "input";
+          input.addEventListener(eventName, function () {
+            updateRow(index, input.dataset.field, input.value, tr);
+          });
+        });
+      }
+      return tr;
+    }
+
+    // 表の中身（tbody）を書き出す。戻り値は計算できなかった日（赤字の日）の数
+    function renderTable(body, list, editable, year, emptyText) {
+      body.textContent = "";  // いったん表の中身を空にする
+      if (list.length === 0) {
+        const tr = el("tr", "empty-row");
+        const td = el("td", null, emptyText || "");
+        td.colSpan = 8;
+        tr.append(td);
+        body.append(tr);
+        return 0;
+      }
+      list.forEach(function (r, index) {
+        body.append(buildRow(r, index, editable, year));
+      });
+      return updateWorkTimes(body, list);
+    }
+
+    // 各行の実働時間を計算して表示する。戻り値は計算できなかった日（赤字の日）の数
+    function updateWorkTimes(body, list) {
+      const cells = body.querySelectorAll(".work-time");
+      let errorCount = 0;
+      list.forEach(function (r, index) {
+        const result = calcWorkMinutes(r);
+        const cell = cells[index];
+        if (!cell) return;
+        if (typeof result === "string") {
+          // 計算できなかった（理由の文字が返ってきた）→ 赤字で理由を表示
+          cell.textContent = result;
+          cell.className = "work-time num error";
+          errorCount++;
+        } else if (isWorking(r.type)) {
+          cell.textContent = minutesToText(result);
+          cell.className = "work-time num";
+        } else {
+          cell.textContent = "--:--";
+          cell.className = "work-time num off";
+        }
+      });
+      return errorCount;
+    }
+
+    // 月間集計（実働時間の合計・勤務日数・有給休暇・欠勤）を書き出す
+    function renderSummary(container, list, title) {
+      container.textContent = "";
+      if (list.length === 0) {
+        container.classList.add("hidden");
+        return;
+      }
+      container.classList.remove("hidden");
+      const s = countSummary(list);
+      container.append(el("h3", "summary-title", title));
+      const grid = el("div", "summary-grid");
+      // [見出し, 数字, 単位, 補足]。上から順に表示されます
+      const items = [
+        ["実働時間 合計", minutesToText(totalWorkMinutes(list)), "", ""],
+        ["勤務日数", String(s.workDays), "日", ""],
+        ["有給休暇", String(s.paidDays), "日", "全日 " + s.paidFull + "日・半休 " + s.halfDays + "回"],
+        ["欠勤", String(s.absentDays), "日", ""]
+      ];
+      for (const [label, value, unit, sub] of items) {
+        const box = el("div", "summary-item");
+        box.append(el("span", "summary-label", label));
+        const v = el("span", "summary-value num", value);
+        if (unit) v.append(el("small", null, unit));
+        box.append(v);
+        if (sub) box.append(el("span", "summary-sub", sub));
+        grid.append(box);
+      }
+      container.append(grid);
+    }
+
+    // 「自分の勤務表」を書き出す（提出済み・読み込み中・提出処理中は読み取り専用）
     function renderMine() {
-      reportRowErrors(renderTable(myBody, myFoot, rows, sheetStatus !== "submitted"));
+      const editable = sheetStatus !== "submitted" && !loading && !submitting;
+      const year = shown ? shown.year : 0;
+      const errors = renderTable(myBody, rows, editable, year,
+        "「勤務表を作成する」を押すと、ここに1か月分の勤務表が表示されます。");
+      renderSummary($("mySummary"), rows, "今月の集計");
+      reportRowErrors(errors);
+      updateHeader();
       updateButtons();
     }
 
     // 1つの欄が修正されたときの処理
-    function updateRow(index, field, value) {
+    function updateRow(index, field, value, tr) {
+      if (sheetStatus === "submitted" || loading || submitting) return;
       const r = rows[index];
 
       if (field === "type") {
@@ -945,76 +2136,24 @@
           r.end = baseEnd;
           r.breakMinutes = 0;
         } else {
-          // 働かない区分に変えたら、時刻を空にする
+          // 働かない区分に変えたら、時刻を空にする（休憩は0分として保存）
           r.start = "";
           r.end = "";
           r.breakMinutes = 0;
         }
-        renderMine();  // 入力できる欄が変わるので、表を書き直す
-        markDirty();
-        return;
-      }
-
-      if (field === "breakMinutes") {
-        r.breakMinutes = Number(value) || 0;
+        // 入力できる欄が変わるので、この行だけを作り直す（キーボードの位置はそのまま）
+        const newTr = buildRow(r, index, true, shown.year);
+        tr.replaceWith(newTr);
+        newTr.querySelector('[data-field="type"]').focus();
+      } else if (field === "breakMinutes") {
+        r.breakMinutes = value === "" ? 0 : Math.max(0, Number(value) || 0);
       } else {
         r[field] = value;  // start・end・remark のどれか
       }
-      reportRowErrors(updateWorkTimes(myBody, myFoot, rows));  // 実働時間と合計だけを計算し直す
+      // 実働時間と集計だけを計算し直す
+      reportRowErrors(updateWorkTimes(myBody, rows));
+      renderSummary($("mySummary"), rows, "今月の集計");
       markDirty();
-    }
-
-    // 勤務区分ごとの日数を数える（画面の集計欄・管理者画面・Excel出力で使います）
-    // 有給休暇は1日、午前休・午後休は半日（0.5日）として数えます
-    function countSummary(list) {
-      const count = (type) => list.filter(r => r.type === type).length;
-      const paidFull = count("有給休暇");
-      const halfDays = count("午前休") + count("午後休");
-      return {
-        workDays: list.filter(r => isWorking(r.type)).length,
-        paidFull: paidFull,
-        halfDays: halfDays,
-        paidDays: paidFull + halfDays * 0.5,
-        absentDays: count("欠勤")
-      };
-    }
-
-    // 各行の実働時間と、月の合計を計算して表示する
-    // 戻り値は、計算できなかった日（赤字の日）の数です
-    function updateWorkTimes(body, foot, list) {
-      const cells = body.querySelectorAll(".work-time");
-      let errorCount = 0;
-
-      list.forEach(function (r, index) {
-        const result = calcWorkMinutes(r);
-        const cell = cells[index];
-
-        if (typeof result === "string") {
-          // 計算できなかった（理由の文字が返ってきた）
-          cell.textContent = result;
-          cell.className = "work-time error";
-          errorCount++;
-        } else {
-          cell.textContent = isWorking(r.type) ? minutesToText(result) : "－";
-          cell.className = "work-time";
-        }
-      });
-
-      // 集計欄（月間勤務日数・有給休暇・欠勤・実働時間の合計）を表の下に書き出す
-      const s = countSummary(list);
-      let footHtml = "";
-      // 上から順に表示されます。順番を変えたいときは、この行の並びを入れ替えます
-      for (const item of [
-        ["実働時間の合計", minutesToText(totalWorkMinutes(list))],
-        ["月間勤務日数", s.workDays + "日"],
-        ["有給休暇取得日数", s.paidDays + "日（全日 " + s.paidFull + "日・半休 " + s.halfDays + "回）"],
-        ["欠勤日数", s.absentDays + "日"]
-      ]) {
-        footHtml += '<tr><td colspan="3">' + item[0] + '</td><td colspan="5" class="summary-value">' + item[1] + "</td></tr>";
-      }
-      foot.innerHTML = footHtml;
-
-      return errorCount;
     }
 
     // 赤字のお知らせを出しているかどうかのしるし
@@ -1031,19 +2170,51 @@
       }
     }
 
-    // 状態に合わせて、ボタンを押せる・押せないを切り替える
+    // 見出し（年月・状態のしるし・提出済みのお知らせ・基本設定の要約）を書き直す
+    function updateHeader() {
+      const target = $("targetMonth").value;
+      let year, month;
+      if (shown) {
+        year = shown.year; month = shown.month;
+      } else if (target) {
+        [year, month] = target.split("-").map(Number);
+      }
+      $("myTitle").textContent = year ? year + "年" + month + "月" : "勤務表";
+
+      const status = sheetStatus || (rows.length > 0 ? "draft" : "none");
+      const badge = $("myBadge");
+      badge.className = "badge " + status;
+      badge.textContent = { none: "未作成", draft: "作成中", submitted: "提出済み" }[status];
+
+      $("lockNote").classList.toggle("hidden", sheetStatus !== "submitted");
+
+      // スマホ用の基本設定の要約（例：佐藤 花子　09:00 〜 18:00・休憩 60分）
+      const s = shown || { startTime: $("startTime").value, endTime: $("endTime").value, breakMinutes: $("breakMinutes").value };
+      $("settingsSummary").textContent =
+        ($("employeeName").value || "氏名未設定") + "　" + s.startTime + " 〜 " + s.endTime + "・休憩 " + s.breakMinutes + "分";
+    }
+
+    // 状態に合わせて、ボタンや入力欄を押せる・押せないに切り替える
     function updateButtons() {
       const hasSheet = shown !== null && rows.length > 0;
       const submitted = sheetStatus === "submitted";
-      $("createButton").disabled = submitted;
-      $("saveButton").disabled = !hasSheet || submitted;
-      $("submitButton").disabled = !hasSheet || submitted;
-      $("excelButton").disabled = !hasSheet;
-      $("pdfButton").disabled = !hasSheet;
-      // 提出済みの月は、基本設定も変えられないようにする
+      const busy = loading || submitting;
+      $("createButton").disabled = submitted || busy;
+      $("saveButton").disabled = !hasSheet || submitted || busy;
+      $("submitButton").disabled = !hasSheet || submitted || busy;
+      $("excelButton").disabled = !hasSheet || busy;  // 提出済みでもExcel出力はできる
+      document.querySelectorAll(".pdf-button").forEach(b => { b.disabled = !hasSheet || busy; });
+      // 提出済みの月は、基本設定の時刻も変えられないようにする（他の月を見るための年月は変えられる）
       for (const id of ["startTime", "endTime", "breakMinutes"]) {
-        $(id).disabled = submitted;
+        $(id).disabled = submitted || busy;
       }
+      $("targetMonth").disabled = submitting;
+    }
+
+    // スマホの基本設定を開く・閉じる
+    function setSettingsOpen(open) {
+      $("settingsPanel").classList.toggle("open", open);
+      $("settingsToggle").setAttribute("aria-expanded", open ? "true" : "false");
     }
 
     // ------------------------------------------------------------
@@ -1055,18 +2226,19 @@
     let saveTimer = null;   // 自動保存の待ち時間を数えるタイマー
     let saveQueue = Promise.resolve(true);  // 保存の順番待ち（2つの保存が同時に走らないように）
 
-    // 保存の状態を表示する
+    // 保存の状態を表示する（kind："saved"・"pending"・"error"・"submitted"）
     function setSaveStatus(text, kind) {
       const box = $("saveStatus");
       box.textContent = text;
-      box.className = kind || "";
+      box.className = "save-status" + (kind ? " " + kind : "");
     }
 
     // 内容が変わったことを記録し、3秒後に自動保存する
     function markDirty() {
+      if (sheetStatus === "submitted") return;  // 提出済みの勤務表は保存しない
       dirty = true;
       editCount++;
-      setSaveStatus("未保存の変更があります（自動で保存します）", "pending");
+      setSaveStatus("未保存の変更があります", "pending");
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveNow, 3000);
     }
@@ -1080,35 +2252,50 @@
 
     async function saveToDatabase() {
       if (!dirty || !shown || !currentUser) return true;
+      // 提出済みの勤務表は、本人からは書き換えない（データベース側でも禁止されています）
+      if (sheetStatus === "submitted") {
+        dirty = false;
+        return true;
+      }
       const countAtStart = editCount;
-      setSaveStatus("保存中…", "pending");
-
-      // 同じ人・同じ年月の行があれば上書き、なければ新しく作る（upsert）
-      const { error } = await sb.from("timesheets").upsert({
+      // 保存する内容を、この時点の写しとして作る（保存中に画面が変わっても混ざらないように）
+      const payload = {
         user_id: currentUser.id,
         year: shown.year,
         month: shown.month,
-        settings: shown,
-        rows: rows,
+        settings: { year: shown.year, month: shown.month, startTime: shown.startTime, endTime: shown.endTime, breakMinutes: shown.breakMinutes },
+        rows: JSON.parse(JSON.stringify(rows)),
         status: "draft"
-      }, { onConflict: "user_id,year,month" });
+      };
+      setSaveStatus("保存中…", "pending");
+
+      // 同じ人・同じ年月の行があれば上書き、なければ新しく作る（upsert）
+      const { error } = await sb.from("timesheets").upsert(payload, { onConflict: "user_id,year,month" });
 
       if (error) {
         console.error(error);
-        setSaveStatus("保存できませんでした。インターネット接続を確認して「途中保存」を押してください。（" + error.message + "）", "error");
+        // 入力した内容は画面に残したまま（dirty のまま）にして、もう一度保存できるようにする
+        setSaveStatus("保存できませんでした", "error");
+        showMessage("保存できませんでした。インターネット接続を確認して、「途中保存」をもう一度押してください。（" + error.message + "）", true);
         return false;
       }
-      // 保存している間にさらに変更されていたら、未保存のまま（もう一度自動保存されます）
+      // 保存しているあいだに、さらに変更されていたら「未保存」のまま（もう一度自動保存されます）
       if (editCount === countAtStart) {
         dirty = false;
-        setSaveStatus("保存済み " + formatDateTime(new Date()));
+        setSaveStatus("保存済み " + formatDateTime(new Date()), "saved");
+      } else {
+        setSaveStatus("未保存の変更があります", "pending");
       }
-      sheetStatus = "draft";
+      if (shown && shown.year === payload.year && shown.month === payload.month) {
+        sheetStatus = "draft";
+        updateHeader();
+      }
       return !dirty;
     }
 
     // 「途中保存」ボタン
     async function saveButtonClicked() {
+      if (!shown || sheetStatus === "submitted") return;
       dirty = true;  // 変更がなくても保存し直す
       if (await saveNow()) showMessage("途中保存しました。続きは別のパソコンやスマホからでも入力できます。");
     }
@@ -1133,17 +2320,23 @@
 
     async function loadMonth() {
       const target = $("targetMonth").value;
-      if (!target) return;
+      if (!target || !currentUser) return;
 
-      // 今の月に保存していない変更があれば、先に保存する
+      // 読み込みが終わるまで、表を編集できないようにする
+      loading = true;
+      renderMine();
+
+      // 今の月に保存していない変更があれば、先に保存する。保存できなければ月を切り替えない
       if (!(await saveNow())) {
+        loading = false;
         if (shown) $("targetMonth").value = shown.year + "-" + String(shown.month).padStart(2, "0");
-        showMessage("保存できていない変更があるため、月を切り替えられませんでした。", true);
+        renderMine();
+        showMessage("保存できていない変更があるため、月を切り替えられませんでした。「途中保存」を押してから、もう一度お試しください。", true);
         return;
       }
 
       const myLoad = ++loadCount;
-      const [year, month] = target.split("-").map(Number);
+      const [year, month] = $("targetMonth").value.split("-").map(Number);
       setSaveStatus("読み込み中…", "pending");
 
       const { data, error } = await sb.from("timesheets")
@@ -1154,16 +2347,18 @@
         .maybeSingle();
 
       if (myLoad !== loadCount) return;  // もっと新しい読み込みが始まっていたら、この結果は使わない
+      loading = false;
       hasRowError = false;
+      dirty = false;
 
       if (error) {
         console.error(error);
         setSaveStatus("");
-        showMessage("勤務表を読み込めませんでした（" + error.message + "）。", true);
         rows = [];
         shown = null;
         sheetStatus = null;
         renderMine();
+        showMessage("勤務表を読み込めませんでした（" + error.message + "）。ページを再読み込みしてください。", true);
         return;
       }
 
@@ -1175,10 +2370,16 @@
         $("startTime").value = shown.startTime;
         $("endTime").value = shown.endTime;
         $("breakMinutes").value = shown.breakMinutes;
-        setSaveStatus("保存済み（最終保存 " + formatDateTime(data.updated_at) + "）");
         if (sheetStatus === "submitted") {
-          showMessage(year + "年" + month + "月の勤務表は提出済みです。修正が必要なときは、管理者に差し戻しを依頼してください。");
+          setSaveStatus("提出済み", "submitted");
         } else {
+          setSaveStatus("保存済み " + formatDateTime(data.updated_at), "saved");
+        }
+        renderMine();
+        setSettingsOpen(false);  // スマホでは、基本設定を閉じて表を見やすくする
+        if (sheetStatus === "submitted") {
+          showMessage(year + "年" + month + "月の勤務表は提出済みです。Excel出力はできます。");
+        } else if (!hasRowError) {
           showMessage(year + "年" + month + "月の勤務表を読み込みました。続きから入力できます。");
         }
       } else {
@@ -1190,16 +2391,17 @@
         $("endTime").value = profile.default_end;
         $("breakMinutes").value = profile.default_break;
         setSaveStatus("");
-        showMessage(year + "年" + month + "月の勤務表はまだありません。「勤務表を作成する」を押してください。");
+        renderMine();
+        setSettingsOpen(true);  // スマホでは、基本設定を開いておく（すぐに作成できるように）
+        showMessage(year + "年" + month + "月の勤務表はまだありません。基本設定を確認して「勤務表を作成する」を押してください。");
       }
-      renderMine();
     }
 
     // ------------------------------------------------------------
     // 提出する
     // ------------------------------------------------------------
     async function submitSheet() {
-      if (!shown || rows.length === 0) return;
+      if (!shown || rows.length === 0 || submitting || loading || sheetStatus === "submitted") return;
       const errorDays = findErrorDays(rows);
       if (errorDays.length > 0) {
         showMessage("赤字の日（" + errorDays.map(r => r.month + "/" + r.day).join("、") + "）を直してから提出してください。", true);
@@ -1208,22 +2410,35 @@
       if (!confirm(shown.year + "年" + shown.month + "月の勤務表を提出します。提出すると、自分では修正できなくなります。よろしいですか？")) {
         return;
       }
-      // 最新の内容を保存してから、状態を「提出済」にする
-      if (!(await saveNow())) return;
-      const { data, error } = await sb.from("timesheets")
-        .update({ status: "submitted" })
-        .eq("user_id", currentUser.id)
-        .eq("year", shown.year)
-        .eq("month", shown.month)
-        .select("updated_at");
-      if (error || !data || data.length === 0) {
-        showMessage("提出できませんでした" + (error ? "（" + error.message + "）" : "") + "。もう一度お試しください。", true);
-        return;
-      }
-      sheetStatus = "submitted";
+      // 提出が終わるまで、表を編集できないようにする
+      submitting = true;
       renderMine();
-      setSaveStatus("提出済み " + formatDateTime(data[0].updated_at));
-      showMessage(shown.year + "年" + shown.month + "月の勤務表を提出しました。");
+      showMessage("提出しています…");
+      try {
+        // 最新の内容の保存が終わったことを確かめてから、状態を「提出済」にする
+        if (!(await saveNow())) {
+          showMessage("保存できなかったため、提出していません。インターネット接続を確認して、もう一度お試しください。", true);
+          return;
+        }
+        const { data, error } = await sb.from("timesheets")
+          .update({ status: "submitted" })
+          .eq("user_id", currentUser.id)
+          .eq("year", shown.year)
+          .eq("month", shown.month)
+          .select("updated_at");
+        // 1行だけ更新されたことを確かめる
+        if (error || !data || data.length !== 1) {
+          showMessage("提出できませんでした" + (error ? "（" + error.message + "）" : "") + "。もう一度お試しください。", true);
+          return;
+        }
+        sheetStatus = "submitted";
+        dirty = false;
+        setSaveStatus("提出済み", "submitted");
+        showMessage(shown.year + "年" + shown.month + "月の勤務表を提出しました（" + formatDateTime(data[0].updated_at) + "）。");
+      } finally {
+        submitting = false;
+        renderMine();
+      }
     }
 
     // ------------------------------------------------------------
@@ -1239,10 +2454,13 @@
       if (name === profile.full_name) return;
       const { error } = await sb.from("profiles").update({ full_name: name }).eq("id", currentUser.id);
       if (error) {
+        $("employeeName").value = profile.full_name;
+        updateHeader();
         showMessage("氏名を保存できませんでした（" + error.message + "）。", true);
         return;
       }
       profile.full_name = name;
+      updateHeader();
       showMessage("氏名を「" + name + "」に変更しました。");
     }
 
@@ -1311,6 +2529,9 @@
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR.header } };
       });
 
+      // 備考のプルダウンの選択肢（「在宅勤務」など。Excelでは空欄が「—」の代わりです）
+      const remarkList = '"' + REMARK_OPTIONS.join(",") + '"';
+
       // 5行目から：1日ずつ書き込む
       const firstRow = 5;
       list.forEach(function (r, i) {
@@ -1343,14 +2564,14 @@
         };
         row.getCell(7).numFmt = "[h]:mm";
 
-        // 備考：祝日名と、手で入力した備考を「／」でつなげて入れる（例：文化の日／在宅勤務）
-        row.getCell(8).value = [r.holidayName, r.remark.trim()].filter(t => t !== "").join("／");
-        // 備考の欄にも、Excel上で候補を選べるプルダウンをつける（候補にない文字も入力できます）
+        // 備考：祝日名と備考を「／」でつなげて入れる（例：文化の日／在宅勤務）
+        row.getCell(8).value = [r.holidayName, (r.remark || "").trim()].filter(t => t !== "").join("／");
+        // 備考の欄にも、Excel上で選べるプルダウンをつける（祝日名が入るので、候補にない文字も入力できるようにする）
         row.getCell(8).dataValidation = {
           type: "list",
           allowBlank: true,
           showErrorMessage: false,
-          formulae: ['"' + Array.from(document.querySelectorAll("#remarkOptions option")).map(o => o.value).join(",") + '"']
+          formulae: [remarkList]
         };
 
         // 勤務区分の欄に、Excel上でも選べるプルダウンをつける
@@ -1424,15 +2645,28 @@
       }
     }
 
-    // ファイル名やシート名に使えない記号（\ / : * ? " < > | [ ]）と空白を取り除く
+    // ファイル名に使えない記号（\ / : * ? " < > | [ ]）と空白を取り除く
     function safeText(text) {
-      return text.replace(/[\\/:*?"<>|\[\]\s]/g, "");
+      return String(text || "").replace(/[\\/:*?"<>|\[\]\s]/g, "");
+    }
+
+    // Excelのシート名を作る。使えない記号を取り除き、31文字以内にし、
+    // 同じ名前（大文字・小文字の違いも同じとみなされます）があれば (2)・(3) と番号を付けます
+    function makeSheetName(name, usedNames) {
+      let base = String(name || "").replace(/[\\/:*?\[\]]/g, "").replace(/^'+|'+$/g, "").trim();
+      if (base === "") base = "社員";
+      base = base.slice(0, 26);
+      if (base.toLowerCase() === "history") base += "_";  // Excelで予約されている名前
+      let sheetName = base, n = 2;
+      while (usedNames.has(sheetName.toLowerCase())) sheetName = base + "(" + n++ + ")";
+      usedNames.add(sheetName.toLowerCase());
+      return sheetName;
     }
 
     // ファイル名を作る（例：勤務表_2026年11月_山田太郎.xlsx）
     // extension を省くと「.xlsx」になります（PDFのときは ".pdf" を渡します）
     function makeFileName(settings, suffix, extension) {
-      const s = safeText(suffix || "");
+      const s = safeText(suffix);
       return "勤務表_" + settings.year + "年" + settings.month + "月" + (s ? "_" + s : "") + (extension || ".xlsx");
     }
 
@@ -1476,11 +2710,16 @@
       }
       if (!excelReady()) return;
 
-      const workbook = new ExcelJS.Workbook();  // Excelファイル（ブック）を新しく作る
-      fillSheet(workbook, shown.month + "月", rows, shown, profile.full_name);
-      const fileName = makeFileName(shown, profile.full_name);
-      await downloadWorkbook(workbook, fileName);
-      showMessage("「" + fileName + "」を出力しました。ブラウザの「ダウンロード」フォルダを確認してください。");
+      try {
+        const workbook = new ExcelJS.Workbook();  // Excelファイル（ブック）を新しく作る
+        fillSheet(workbook, makeSheetName(shown.month + "月", new Set()), rows, shown, profile.full_name);
+        const fileName = makeFileName(shown, profile.full_name);
+        await downloadWorkbook(workbook, fileName);
+        showMessage("「" + fileName + "」を出力しました。ブラウザの「ダウンロード」フォルダを確認してください。");
+      } catch (err) {
+        console.error(err);
+        showMessage("Excelファイルを作れませんでした。もう一度お試しください。", true);
+      }
     }
 
     // ------------------------------------------------------------
@@ -1497,22 +2736,17 @@
 
       let body = "";
       list.forEach(function (r) {
-        let rowClass = "";
-        if (r.holidayName) rowClass = "holiday";
-        else if (r.weekday === 0) rowClass = "sunday";
-        else if (r.weekday === 6) rowClass = "saturday";
-
         const minutes = calcWorkMinutes(r);
         const working = isWorking(r.type) && r.start && r.end;
-        const remark = [r.holidayName, r.remark.trim()].filter(t => t !== "").join("／");
+        const remark = [r.holidayName, (r.remark || "").trim()].filter(t => t !== "").join("／");
 
         body +=
-          '<tr class="' + rowClass + '">' +
+          '<tr class="' + rowClassOf(r) + '">' +
           "<td>" + r.month + "/" + r.day + "</td>" +
           "<td>" + WEEKDAYS[r.weekday] + "</td>" +
           "<td>" + escapeHtml(r.type) + "</td>" +
-          "<td>" + (working ? r.start : "") + "</td>" +
-          "<td>" + (working ? r.end : "") + "</td>" +
+          "<td>" + (working ? escapeHtml(r.start) : "") + "</td>" +
+          "<td>" + (working ? escapeHtml(r.end) : "") + "</td>" +
           "<td>" + (working ? r.breakMinutes + "分" : "") + "</td>" +
           "<td>" + (typeof minutes === "number" && isWorking(r.type) ? minutesToText(minutes) : "－") + "</td>" +
           '<td class="remark">' + escapeHtml(remark) + "</td>" +
@@ -1536,13 +2770,13 @@
           '<span class="pdf-name">氏名：' + escapeHtml(employeeName) + "</span>" +
           "<span>状態：" + statusText + "　出力日：" + dateToKey(new Date()).replace(/-/g, "/") + "</span>" +
         "</div>" +
-        '<div class="pdf-info"><span>基本勤務時間：' + settings.startTime + "〜" + settings.endTime +
-          "（休憩" + settings.breakMinutes + "分）</span></div>" +
+        '<div class="pdf-info"><span>基本勤務時間：' + escapeHtml(settings.startTime) + "〜" + escapeHtml(settings.endTime) +
+          "（休憩" + escapeHtml(settings.breakMinutes) + "分）</span></div>" +
         "<table><thead><tr>" +
           "<th>日付</th><th>曜日</th><th>勤務区分</th><th>出勤時刻</th><th>退勤時刻</th><th>休憩時間</th><th>実働時間</th><th>備考</th>" +
         "</tr></thead><tbody>" + body + "</tbody></table>" +
         '<table class="pdf-summary"><tbody>' + summary + "</tbody></table>" +
-        '<p class="note" style="margin-top:6px;font-size:11px;">※午前休・午後休は有給休暇0.5日として数えています</p>'
+        '<p style="margin-top:6px;font-size:11px;">※午前休・午後休は有給休暇0.5日として数えています</p>'
       );
     }
 
@@ -1556,7 +2790,9 @@
     }
 
     // 「PDF出力」ボタン（自分の勤務表）
+    let pdfBusy = false;
     async function exportPdfMine() {
+      if (pdfBusy) return;
       if (!shown || rows.length === 0) {
         showMessage("先に「勤務表を作成する」ボタンで勤務表を作ってください。", true);
         return;
@@ -1568,8 +2804,8 @@
       }
       if (!pdfReady()) return;
 
-      const button = $("pdfButton");
-      button.disabled = true;  // 作っている間に2回押されないようにする
+      pdfBusy = true;  // 作っている間に2回押されないようにする
+      document.querySelectorAll(".pdf-button").forEach(b => { b.disabled = true; });
       showMessage("PDFを作成しています…");
       const area = $("pdfArea");
       try {
@@ -1599,6 +2835,7 @@
         showMessage("PDFの作成に失敗しました。もう一度お試しください。", true);
       } finally {
         area.innerHTML = "";
+        pdfBusy = false;
         updateButtons();
       }
     }
@@ -1607,9 +2844,14 @@
     // 管理者画面
     // ------------------------------------------------------------
 
-    // 表示中の一覧（[{ person: 社員の情報, sheet: 勤務表 または null }, ...]）
+    // 表示中の一覧（[{ person: 社員の情報, sheet: 勤務表 または null, status, errors }, ...]）
     let adminList = [];
-    let adminMonthShown = null;  // 一覧の年月 { year, month }
+    let adminMonthShown = null;   // 一覧の年月 { year, month }
+    let adminFilter = "all";      // 絞り込み（all・unsubmitted・submitted・check）
+    let adminDetailId = null;     // 「表示」で開いている社員の id
+    let adminLoadCount = 0;       // 古い読み込み結果を使わないための番号
+    const ADMIN_PAGE = 10;        // スマホのカードを一度に表示する人数
+    let adminVisible = ADMIN_PAGE;
 
     const STATUS_LABEL = { none: "未作成", draft: "作成中", submitted: "提出済" };
 
@@ -1620,14 +2862,16 @@
         return;
       }
       const [year, month] = target.split("-").map(Number);
+      const myLoad = ++adminLoadCount;
       showMessage("読み込み中…", false, "adminMessage");
-      $("adminDetail").classList.add("hidden");
+      closeAdminDetail();
 
       // 社員の一覧と、その月の勤務表を同時に読み込む
       const [people, sheets] = await Promise.all([
         sb.from("profiles").select("id, email, full_name").order("full_name"),
         sb.from("timesheets").select("user_id, settings, rows, status, updated_at").eq("year", year).eq("month", month)
       ]);
+      if (myLoad !== adminLoadCount) return;  // もっと新しい読み込みが始まっていたら、この結果は使わない
       if (people.error || sheets.error) {
         showMessage("読み込めませんでした（" + (people.error || sheets.error).message + "）。", true, "adminMessage");
         return;
@@ -1635,105 +2879,278 @@
 
       adminMonthShown = { year: year, month: month };
       adminList = people.data.map(function (person) {
-        return { person: person, sheet: sheets.data.find(s => s.user_id === person.id) || null };
+        const sheet = sheets.data.find(s => s.user_id === person.id) || null;
+        return {
+          person: person,
+          sheet: sheet,
+          status: sheet ? sheet.status : "none",
+          errors: sheet ? findErrorDays(sheet.rows).length : 0  // 計算できない日の数（要確認）
+        };
       });
+      adminVisible = ADMIN_PAGE;
+      showMessage("", false, "adminMessage");
       renderAdmin();
-
-      const submitted = adminList.filter(a => a.sheet && a.sheet.status === "submitted").length;
-      showMessage(year + "年" + month + "月：社員 " + adminList.length + "人のうち、提出済 " + submitted + "人", false, "adminMessage");
     }
 
-    // 一覧の表を書き出す
-    function renderAdmin() {
-      const body = $("adminBody");
-      if (adminList.length === 0) {
-        body.innerHTML = '<tr><td colspan="9" class="empty">社員が登録されていません。</td></tr>';
-        return;
-      }
-      body.innerHTML = adminList.map(function (a, i) {
-        const sheet = a.sheet;
-        const status = sheet ? sheet.status : "none";
-        let cells = "<td>－</td><td>－</td><td>－</td><td>－</td><td>－</td>";
-        let actions = "";
-        if (sheet) {
-          const s = countSummary(sheet.rows);
-          const errors = findErrorDays(sheet.rows).length;
-          cells =
-            "<td>" + minutesToText(totalWorkMinutes(sheet.rows)) + (errors > 0 ? '<br><span class="badge draft">要確認 ' + errors + "件</span>" : "") + "</td>" +
-            "<td>" + s.workDays + "日</td>" +
-            "<td>" + s.paidDays + "日</td>" +
-            "<td>" + s.absentDays + "日</td>" +
-            "<td>" + formatDateTime(sheet.updated_at) + "</td>";
-          actions =
-            '<button class="small" data-action="view" data-index="' + i + '">表示</button>' +
-            '<button class="small excel" data-action="excel" data-index="' + i + '">Excel</button>' +
-            (status === "submitted" ? '<button class="small gray" data-action="reopen" data-index="' + i + '">差し戻し</button>' : "");
+    // 絞り込み・検索・並べ替えをした「表示用の一覧」を作る（adminList そのものは変えません）
+    function visibleAdminList() {
+      const query = $("adminSearch").value.trim().toLowerCase();
+      const sort = $("adminSort").value;
+      const list = adminList.filter(function (a) {
+        if (adminFilter === "unsubmitted" && a.status === "submitted") return false;
+        if (adminFilter === "submitted" && a.status !== "submitted") return false;
+        if (adminFilter === "check" && a.errors === 0) return false;
+        if (query) {
+          const text = ((a.person.full_name || "") + " " + (a.person.email || "")).toLowerCase();
+          if (!text.includes(query)) return false;
         }
-        return "<tr>" +
-          "<td>" + escapeHtml(a.person.full_name) + "</td>" +
-          "<td>" + escapeHtml(a.person.email || "") + "</td>" +
-          '<td><span class="badge ' + status + '">' + STATUS_LABEL[status] + "</span></td>" +
-          cells +
-          "<td>" + actions + "</td>" +
-          "</tr>";
-      }).join("");
+        return true;
+      });
+      // 並べ替え。同じ順位の人は、もとの順番（氏名順）のまま
+      const order = new Map(adminList.map((a, i) => [a, i]));
+      const statusOrder = { none: 0, draft: 1, submitted: 2 };
+      list.sort(function (x, y) {
+        if (sort === "unsubmitted") {
+          const diff = statusOrder[x.status] - statusOrder[y.status];
+          if (diff !== 0) return diff;
+        } else if (sort === "updated") {
+          // 勤務表のない人を先頭に、そのあとは最終更新が古い順
+          if (!x.sheet !== !y.sheet) return x.sheet ? 1 : -1;
+          if (x.sheet && y.sheet) {
+            const diff = new Date(x.sheet.updated_at) - new Date(y.sheet.updated_at);
+            if (diff !== 0) return diff;
+          }
+        }
+        return order.get(x) - order.get(y);
+      });
+      return list;
     }
 
-    // 一覧の中のボタン（表示・Excel・差し戻し）が押されたとき
-    $("adminBody").addEventListener("click", function (e) {
-      const button = e.target.closest("button[data-action]");
-      if (!button) return;
-      const a = adminList[Number(button.dataset.index)];
-      if (button.dataset.action === "view") showAdminDetail(a);
-      if (button.dataset.action === "excel") exportOne(a);
-      if (button.dataset.action === "reopen") reopenSheet(a);
-    });
+    // 状態のしるしを作る
+    function statusBadge(status) {
+      return el("span", "badge " + status, STATUS_LABEL[status]);
+    }
+
+    // 要確認のしるしを作る（例：● 要確認 1件）
+    function warnChip(count) {
+      const chip = el("span", "warn-chip");
+      chip.append(el("span", "warn-dot"), "要確認 " + count + "件");
+      return chip;
+    }
+
+    // 一覧の操作ボタン（表示・Excel出力・差し戻し）を作る
+    function adminButtons(a) {
+      const view = el("button", "btn btn-outline btn-small", "表示");
+      view.type = "button";
+      view.addEventListener("click", () => showAdminDetail(a));
+
+      const excel = el("button", "btn btn-excel btn-small");
+      excel.type = "button";
+      excel.append(el("span", "xl-icon", "X"), "Excel出力");
+      excel.disabled = !a.sheet;  // 未作成の勤務表は出力できない
+      excel.addEventListener("click", () => exportOne(a));
+
+      const buttons = [view, excel];
+      if (a.status === "submitted") {
+        // 差し戻しは、提出済みの勤務表にだけ出す
+        const reopen = el("button", "btn btn-gray btn-small", "差し戻し");
+        reopen.type = "button";
+        reopen.addEventListener("click", () => reopenSheet(a));
+        buttons.push(reopen);
+      }
+      return buttons;
+    }
+
+    // 集計の値（勤務表がないときは "--"）
+    function adminFigures(a) {
+      if (!a.sheet) return { work: "--:--", days: "--", paid: "--", absent: "--", updated: "--/-- --:--" };
+      const s = countSummary(a.sheet.rows);
+      return {
+        work: minutesToText(totalWorkMinutes(a.sheet.rows)),
+        days: String(s.workDays),
+        paid: String(s.paidDays),
+        absent: String(s.absentDays),
+        updated: formatDateTime(a.sheet.updated_at)
+      };
+    }
+
+    // 管理者画面の件数・一覧（表とカード）を書き出す
+    function renderAdmin() {
+      // 件数
+      const count = (fn) => adminList.filter(fn).length;
+      $("statAll").textContent = adminList.length;
+      $("statSubmitted").textContent = count(a => a.status === "submitted");
+      $("statDraft").textContent = count(a => a.status === "draft");
+      $("statNone").textContent = count(a => a.status === "none");
+      $("chipAll").textContent = adminList.length;
+      $("chipUnsubmitted").textContent = count(a => a.status !== "submitted");
+      $("chipSubmitted").textContent = count(a => a.status === "submitted");
+      $("chipCheck").textContent = count(a => a.errors > 0);
+      document.querySelectorAll("#adminChips .chip").forEach(function (chip) {
+        const active = chip.dataset.filter === adminFilter;
+        chip.classList.toggle("active", active);
+        chip.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+
+      const list = visibleAdminList();
+      const body = $("adminBody");
+      const cards = $("adminCards");
+      body.textContent = "";
+      cards.textContent = "";
+
+      if (list.length === 0) {
+        const text = adminList.length === 0 ? "社員が登録されていません。" : "条件に合う社員はいません。";
+        const tr = el("tr");
+        const td = el("td", "admin-empty", text);
+        td.colSpan = 8;
+        tr.append(td);
+        body.append(tr);
+        cards.append(el("div", "panel admin-empty", text));
+      }
+
+      // パソコン：表
+      for (const a of list) {
+        const f = adminFigures(a);
+        const tr = el("tr");
+        if (a.person.id === adminDetailId) tr.classList.add("selected");
+        const person = el("td", "person");
+        person.append(el("span", "person-name", a.person.full_name || "（氏名未設定）"), el("span", "person-email", a.person.email || ""));
+        const status = el("td");
+        const statusBox = el("div", "status-cell");
+        statusBox.append(statusBadge(a.status));
+        if (a.errors > 0) statusBox.append(warnChip(a.errors));
+        status.append(statusBox);
+        const actions = el("td");
+        const actionBox = el("div", "admin-actions");
+        actionBox.append(...adminButtons(a));
+        actions.append(actionBox);
+        tr.append(
+          person,
+          status,
+          el("td", "num", f.work),
+          el("td", "num", f.days + "日"),
+          el("td", "num", f.paid + "日"),
+          el("td", "num", f.absent + "日"),
+          el("td", "num", f.updated),
+          actions
+        );
+        body.append(tr);
+      }
+
+      // スマホ：カード（多いときは「さらに表示」で少しずつ出す）
+      for (const a of list.slice(0, adminVisible)) {
+        const f = adminFigures(a);
+        const card = el("div", "panel person-card");
+        const top = el("div", "card-top");
+        const who = el("div");
+        who.append(el("span", "person-name", a.person.full_name || "（氏名未設定）"), el("span", "person-email", a.person.email || ""));
+        top.append(who, statusBadge(a.status));
+        card.append(top);
+        if (!a.sheet) {
+          card.append(el("p", "card-note", "まだ勤務表が作成されていません。"));
+        } else {
+          if (a.errors > 0) {
+            const warn = el("div");
+            warn.style.marginTop = "6px";
+            warn.append(warnChip(a.errors));
+            card.append(warn);
+          }
+          const stats = el("div", "card-stats");
+          for (const [label, value, unit] of [["実働時間", f.work, ""], ["勤務日数", f.days, "日"], ["有給休暇", f.paid, "日"], ["欠勤", f.absent, "日"]]) {
+            const box = el("div");
+            const strong = el("strong", "num", value);
+            if (unit) strong.append(el("small", null, unit));
+            box.append(el("span", null, label), strong);
+            stats.append(box);
+          }
+          card.append(stats, el("div", "card-updated", "最終更新 " + f.updated));
+        }
+        const actions = el("div", "card-actions");
+        actions.append(...adminButtons(a));
+        card.append(actions);
+        cards.append(card);
+      }
+
+      // 表示中の人数と「さらに表示」
+      const isNarrow = window.matchMedia("(max-width: 820px)").matches;
+      const shownCount = isNarrow ? Math.min(adminVisible, list.length) : list.length;
+      $("adminCount").textContent = isNarrow
+        ? list.length + "名中 " + shownCount + "名を表示"
+        : list.length + "名を表示";
+      $("adminMore").classList.toggle("hidden", !(isNarrow && list.length > adminVisible));
+    }
 
     // 社員の勤務表を読み取り専用で表示する
     function showAdminDetail(a) {
       const { year, month } = adminMonthShown;
-      $("adminDetailTitle").textContent = a.person.full_name + " さん　" + year + "年" + month + "月（" + STATUS_LABEL[a.sheet.status] + "）";
-      renderTable($("adminDetailBody"), $("adminDetailFoot"), a.sheet.rows, false);
+      adminDetailId = a.person.id;
+      $("adminDetailTitle").textContent = (a.person.full_name || "（氏名未設定）") + "さんの勤務表";
+      $("adminDetailSub").textContent = year + "年" + month + "月（" + STATUS_LABEL[a.status] + "）　内容の編集は本人のみ行えます。";
+      $("adminDetailExcel").disabled = !a.sheet;
+      $("adminDetailEmpty").classList.toggle("hidden", !!a.sheet);
+      $("adminDetailSheet").classList.toggle("hidden", !a.sheet);
+      if (a.sheet) {
+        renderTable($("adminDetailBody"), a.sheet.rows, false, a.sheet.settings.year);
+        renderSummary($("adminDetailSummary"), a.sheet.rows, "この月の集計");
+      }
       $("adminDetail").classList.remove("hidden");
-      $("adminDetail").scrollIntoView({ behavior: "smooth" });
+      renderAdmin();  // 選んだ社員の行に色を付ける
+      $("adminDetail").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function closeAdminDetail() {
+      adminDetailId = null;
+      $("adminDetail").classList.add("hidden");
     }
 
     // 1人分をExcel出力する
     async function exportOne(a) {
+      if (!a || !a.sheet) {
+        showMessage("まだ勤務表が作成されていないため、出力できません。", true, "adminMessage");
+        return;
+      }
       if (!excelReady("adminMessage")) return;
-      const workbook = new ExcelJS.Workbook();
-      fillSheet(workbook, a.sheet.settings.month + "月", a.sheet.rows, a.sheet.settings, a.person.full_name);
-      const fileName = makeFileName(a.sheet.settings, a.person.full_name);
-      await downloadWorkbook(workbook, fileName);
-      showMessage("「" + fileName + "」を出力しました。", false, "adminMessage");
+      try {
+        const workbook = new ExcelJS.Workbook();
+        fillSheet(workbook, makeSheetName(a.sheet.settings.month + "月", new Set()), a.sheet.rows, a.sheet.settings, a.person.full_name);
+        const fileName = makeFileName(a.sheet.settings, a.person.full_name || a.person.email);
+        await downloadWorkbook(workbook, fileName);
+        showMessage("「" + fileName + "」を出力しました。", false, "adminMessage");
+      } catch (err) {
+        console.error(err);
+        showMessage("Excelファイルを作れませんでした。もう一度お試しください。", true, "adminMessage");
+      }
     }
 
-    // 全員分を1つのExcelファイルにまとめて出力する（1人1シート）
+    // 全員分を1つのExcelファイルにまとめて出力する（1人1シート。絞り込みに関係なく、勤務表のある全員分）
     async function exportAll() {
       const withSheet = adminList.filter(a => a.sheet);
       if (!adminMonthShown || withSheet.length === 0) {
-        showMessage("出力できる勤務表がありません。先に「表示を更新」を押してください。", true, "adminMessage");
+        showMessage("出力できる勤務表がありません。", true, "adminMessage");
         return;
       }
       if (!excelReady("adminMessage")) return;
 
-      const workbook = new ExcelJS.Workbook();
-      const usedNames = new Set();
-      for (const a of withSheet) {
-        // シート名は氏名（31文字まで・同じ名前があれば番号を付ける）
-        const base = (safeText(a.person.full_name) || "社員").slice(0, 28);
-        let name = base, n = 2;
-        while (usedNames.has(name)) name = base + "(" + n++ + ")";
-        usedNames.add(name);
-        fillSheet(workbook, name, a.sheet.rows, a.sheet.settings, a.person.full_name);
+      try {
+        const workbook = new ExcelJS.Workbook();
+        const usedNames = new Set();
+        for (const a of withSheet) {
+          // シート名は氏名（同じ名前の人がいれば番号を付ける）
+          const name = makeSheetName(a.person.full_name || (a.person.email || "").split("@")[0], usedNames);
+          fillSheet(workbook, name, a.sheet.rows, a.sheet.settings, a.person.full_name);
+        }
+        const fileName = makeFileName(adminMonthShown, "全員");
+        await downloadWorkbook(workbook, fileName);
+        showMessage("「" + fileName + "」を出力しました（" + withSheet.length + "人分）。", false, "adminMessage");
+      } catch (err) {
+        console.error(err);
+        showMessage("Excelファイルを作れませんでした。もう一度お試しください。", true, "adminMessage");
       }
-      const fileName = makeFileName(adminMonthShown, "全員");
-      await downloadWorkbook(workbook, fileName);
-      showMessage("「" + fileName + "」を出力しました（" + withSheet.length + "人分）。", false, "adminMessage");
     }
 
     // 差し戻し（提出済 → 作成中）。社員がまた修正できるようになります
     async function reopenSheet(a) {
+      if (a.status !== "submitted") return;
       const { year, month } = adminMonthShown;
       if (!confirm(a.person.full_name + " さんの " + year + "年" + month + "月の勤務表を差し戻します。よろしいですか？")) return;
       const { data, error } = await sb.from("timesheets")
@@ -1759,19 +3176,23 @@
       $("loginView").classList.toggle("hidden", name !== "login");
       $("passwordView").classList.toggle("hidden", name !== "password");
       $("appView").classList.toggle("hidden", name !== "app");
+      // タブとメールアドレスは、ログイン後の画面だけに出す
+      $("tabs").classList.toggle("hidden", name !== "app");
+      $("userBox").classList.toggle("hidden", name !== "app");
     }
 
     // "my"（自分の勤務表）・"admin"（管理者）のタブを切り替える
-    let adminLoaded = false;
     function switchTab(name) {
       $("myTab").classList.toggle("active", name === "my");
       $("adminTab").classList.toggle("active", name === "admin");
+      $("myTab").setAttribute("aria-current", name === "my" ? "page" : "false");
+      $("adminTab").setAttribute("aria-current", name === "admin" ? "page" : "false");
       $("myView").classList.toggle("hidden", name !== "my");
       $("adminView").classList.toggle("hidden", name !== "admin");
-      if (name === "admin" && !adminLoaded) {
-        adminLoaded = true;
-        loadAdmin();
-      }
+      // スマホで、画面の下に操作ボタンを固定するのは「自分の勤務表」のときだけ
+      $("appView").classList.toggle("my-active", name === "my");
+      if (name === "admin") loadAdmin();  // 開くたびに最新の状態を読み込む
+      window.scrollTo(0, 0);
     }
 
     // ------------------------------------------------------------
@@ -1813,7 +3234,9 @@
         currentUser = null;
         profile = null;
         showView("login");
-        if (linkError) showMessage("リンクが無効か、有効期限が切れています。もう一度メールを送ってください。（" + linkError + "）", true, "loginMessage");
+        if (linkError) {
+          showMessage("メールのリンクが無効か、有効期限が切れています。メールアドレスを入力して「パスワードを忘れた場合」を押すと、新しいメールを送れます。", true, "loginMessage");
+        }
         return;
       }
       if (needPassword) {
@@ -1828,7 +3251,10 @@
 
     // ログインできたら、社員の情報を読み込んで勤務表の画面を開く
     async function startApp() {
-      const { data, error } = await sb.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
+      const { data, error } = await sb.from("profiles")
+        .select("id, email, full_name, is_admin, default_start, default_end, default_break")
+        .eq("id", currentUser.id)
+        .maybeSingle();
       if (error || !data) {
         showView("login");
         showMessage("社員の情報が見つかりませんでした。管理者に連絡してください。" + (error ? "（" + error.message + "）" : ""), true, "loginMessage");
@@ -1838,21 +3264,37 @@
       $("userEmail").textContent = currentUser.email;
       $("employeeName").value = profile.full_name;
       $("adminTab").classList.toggle("hidden", !profile.is_admin);
-      adminLoaded = false;
       switchTab("my");
       showView("app");
       await loadMonth();
     }
 
+    // パスワード欄の「目」のボタン：押すたびに、文字を見せる・隠すを切り替える
+    const EYE_OPEN = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_CLOSED = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 20L20 4"/></svg>';
+    document.querySelectorAll(".eye-button").forEach(function (button) {
+      button.innerHTML = EYE_OPEN;  // 決まった絵だけを入れるので、innerHTML で問題ありません
+      button.addEventListener("click", function () {
+        const input = $(button.dataset.target);
+        const show = input.type === "password";
+        input.type = show ? "text" : "password";
+        button.innerHTML = show ? EYE_CLOSED : EYE_OPEN;
+        button.setAttribute("aria-label", show ? "パスワードを隠す" : "パスワードを表示する");
+      });
+    });
+
     // 「ログイン」ボタン
     $("loginForm").addEventListener("submit", async function (e) {
       e.preventDefault();  // ページの再読み込みを止める
+      const email = $("loginEmail").value.trim();
+      const password = $("loginPassword").value;
+      if (!email || !password) {
+        showMessage("メールアドレスとパスワードを入力してください。", true, "loginMessage");
+        return;
+      }
       $("loginButton").disabled = true;
-      showMessage("ログイン中…", false, "loginMessage");
-      const { error } = await sb.auth.signInWithPassword({
-        email: $("loginEmail").value.trim(),
-        password: $("loginPassword").value
-      });
+      showMessage("ログインしています…", false, "loginMessage");
+      const { error } = await sb.auth.signInWithPassword({ email: email, password: password });
       $("loginButton").disabled = false;
       if (error) {
         showMessage("ログインできませんでした。メールアドレスとパスワードを確認してください。", true, "loginMessage");
@@ -1862,30 +3304,39 @@
       showMessage("", false, "loginMessage");
     });
 
-    // 「パスワードを忘れた場合」：再設定用のメールを送る
+    // 「パスワードを忘れた場合」：入力されたメールアドレス宛てに、再設定用のメールを送る
     $("forgotButton").addEventListener("click", async function () {
       const email = $("loginEmail").value.trim();
       if (!email) {
-        showMessage("メールアドレスを入力してから押してください。", true, "loginMessage");
+        showMessage("メールアドレスを入力してから「パスワードを忘れた場合」を押してください。", true, "loginMessage");
+        $("loginEmail").focus();
         return;
       }
+      $("forgotButton").disabled = true;
+      showMessage("メールを送っています…", false, "loginMessage");
       const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      $("forgotButton").disabled = false;
       if (error) {
-        showMessage("メールを送れませんでした（" + error.message + "）。", true, "loginMessage");
+        showMessage("メールを送れませんでした。しばらく待ってから、もう一度お試しください。（" + error.message + "）", true, "loginMessage");
         return;
       }
       showMessage(email + " にパスワード再設定のメールを送りました。メールのリンクを開いてください。", false, "loginMessage");
     });
 
-    // 「設定する」ボタン（新しいパスワード）
+    // 「パスワードを設定する」ボタン
     $("passwordForm").addEventListener("submit", async function (e) {
       e.preventDefault();
       const password = $("newPassword").value;
+      if (password.length < 8) {
+        showMessage("パスワードは8文字以上で入力してください。", true, "passwordMessage");
+        return;
+      }
       if (password !== $("newPassword2").value) {
-        showMessage("2つのパスワードが一致していません。", true, "passwordMessage");
+        showMessage("2つのパスワードが一致していません。もう一度入力してください。", true, "passwordMessage");
         return;
       }
       $("passwordButton").disabled = true;
+      showMessage("設定しています…", false, "passwordMessage");
       const { error } = await sb.auth.updateUser({ password: password });
       $("passwordButton").disabled = false;
       if (error) {
@@ -1893,6 +3344,9 @@
         return;
       }
       needPassword = false;
+      $("newPassword").value = "";
+      $("newPassword2").value = "";
+      showMessage("", false, "passwordMessage");
       history.replaceState(null, "", location.pathname);  // URLに残ったリンクの情報を消す
       const { data } = await sb.auth.getSession();
       handleSession(data.session);
@@ -1908,6 +3362,7 @@
       shown = null;
       sheetStatus = null;
       adminList = [];
+      closeAdminDetail();
       setSaveStatus("");
       showMessage("");
       await sb.auth.signOut();
@@ -1918,14 +3373,39 @@
     $("saveButton").addEventListener("click", saveButtonClicked);
     $("submitButton").addEventListener("click", submitSheet);
     $("excelButton").addEventListener("click", exportMine);
-    $("pdfButton").addEventListener("click", exportPdfMine);
+    document.querySelectorAll(".pdf-button").forEach(b => b.addEventListener("click", exportPdfMine));
     $("targetMonth").addEventListener("change", loadMonth);
     $("employeeName").addEventListener("change", saveName);
+    for (const id of ["employeeName", "startTime", "endTime", "breakMinutes"]) {
+      $(id).addEventListener("input", updateHeader);  // スマホの要約を書き直す
+    }
+    $("settingsToggle").addEventListener("click", function () {
+      setSettingsOpen(!$("settingsPanel").classList.contains("open"));
+    });
     $("myTab").addEventListener("click", () => switchTab("my"));
     $("adminTab").addEventListener("click", () => switchTab("admin"));
-    $("adminReloadButton").addEventListener("click", loadAdmin);
     $("adminMonth").addEventListener("change", loadAdmin);
     $("adminExportAllButton").addEventListener("click", exportAll);
+    $("adminChips").addEventListener("click", function (e) {
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      adminFilter = chip.dataset.filter;
+      adminVisible = ADMIN_PAGE;
+      renderAdmin();
+    });
+    $("adminSearch").addEventListener("input", function () { adminVisible = ADMIN_PAGE; renderAdmin(); });
+    $("adminSort").addEventListener("change", renderAdmin);
+    $("adminMore").addEventListener("click", function () { adminVisible += ADMIN_PAGE; renderAdmin(); });
+    $("adminDetailClose").addEventListener("click", function () { closeAdminDetail(); renderAdmin(); });
+    $("adminDetailExcel").addEventListener("click", function () {
+      exportOne(adminList.find(a => a.person.id === adminDetailId));
+    });
+    // 画面の幅が変わったら（スマホを横にしたときなど）、一覧の表示人数を合わせ直す
+    window.matchMedia("(max-width: 820px)").addEventListener("change", function () {
+      if (adminList.length > 0) renderAdmin();
+    });
+
+    updateHeader();
   </script>
 
   <!--
