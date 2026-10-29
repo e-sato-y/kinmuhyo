@@ -3,4 +3,4 @@
 backup/
 dist/
 .claude/
-supabase/.temp/
+**/supabase/.temp/
