@@ -10,6 +10,7 @@
   ・提出：提出すると編集できなくなります（管理者が差し戻すと、また編集できます）
   ・管理者は、全社員の勤務表の一覧・閲覧・Excel出力・差し戻しができます
   ・表示中の勤務表をExcelファイル（.xlsx）に出力
+  ・表示中の勤務表をPDFファイル（A4縦）に出力
 
   保存先はインターネット上のデータベース「Supabase」です。
   接続先の設定は config.js に書きます（README.md の手順を参照）。
@@ -139,6 +140,7 @@
     #saveButton   { background: #5b7fa6; }
     #submitButton { background: #d68910; }
     button.excel  { background: #217346; }  /* Excelらしい緑色 */
+    button.pdf    { background: #b03a2e; }  /* PDFらしい赤色 */
     button.gray   { background: #7f8c8d; }
     button:hover  { opacity: 0.85; }
 
@@ -326,6 +328,58 @@
     .badge.draft     { background: #fdf2e0; color: #b9770e; }
     .badge.submitted { background: #e3f4ea; color: #217346; }
 
+    /* PDF出力用の勤務表（画面の外に置いて、見えないようにしておく）
+       幅 794px は、A4用紙の横幅とほぼ同じ比率です */
+    #pdfArea {
+      position: fixed;
+      left: -10000px;
+      top: 0;
+      width: 794px;
+      padding: 36px 40px;
+      box-sizing: border-box;
+      background: #fff;
+      color: #222;
+      font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+    }
+    #pdfArea .pdf-title {
+      font-size: 22px;
+      font-weight: bold;
+      margin: 0 0 10px;
+    }
+    #pdfArea .pdf-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+    #pdfArea .pdf-name {
+      font-size: 15px;
+      font-weight: bold;
+    }
+    #pdfArea table {
+      font-size: 12px;
+    }
+    #pdfArea th,
+    #pdfArea td {
+      padding: 3px 6px;
+    }
+    #pdfArea td.remark {
+      text-align: left;
+    }
+    #pdfArea .pdf-summary {
+      width: 60%;
+      margin-top: 12px;
+    }
+    #pdfArea .pdf-summary th {
+      background: #e8eef5;
+      color: #222;
+      text-align: left;
+      width: 40%;
+    }
+    #pdfArea .pdf-summary td {
+      text-align: left;
+    }
+
     /* 狭い画面（スマホ）では余白を小さくする */
     @media (max-width: 600px) {
       body { padding: 12px; }
@@ -426,6 +480,7 @@
           <button id="saveButton">途中保存</button>
           <button id="submitButton">提出する</button>
           <button id="excelButton" class="excel">Excel出力</button>
+          <button id="pdfButton" class="pdf">PDF出力</button>
         </div>
 
         <div id="saveStatus"></div>
@@ -519,6 +574,9 @@
   <datalist id="remarkOptions">
     <option value="在宅勤務">
   </datalist>
+
+  <!-- PDF出力のときだけ、ここに印刷用の勤務表を組み立てます（画面には表示されません） -->
+  <div id="pdfArea" aria-hidden="true"></div>
 
   <script>
     // ===== JavaScript：動きの設定 =====
@@ -979,6 +1037,7 @@
       $("saveButton").disabled = !hasSheet || submitted;
       $("submitButton").disabled = !hasSheet || submitted;
       $("excelButton").disabled = !hasSheet;
+      $("pdfButton").disabled = !hasSheet;
       // 提出済みの月は、基本設定も変えられないようにする
       for (const id of ["startTime", "endTime", "breakMinutes"]) {
         $(id).disabled = submitted;
@@ -1369,9 +1428,10 @@
     }
 
     // ファイル名を作る（例：勤務表_2026年11月_山田太郎.xlsx）
-    function makeFileName(settings, suffix) {
+    // extension を省くと「.xlsx」になります（PDFのときは ".pdf" を渡します）
+    function makeFileName(settings, suffix, extension) {
       const s = safeText(suffix || "");
-      return "勤務表_" + settings.year + "年" + settings.month + "月" + (s ? "_" + s : "") + ".xlsx";
+      return "勤務表_" + settings.year + "年" + settings.month + "月" + (s ? "_" + s : "") + (extension || ".xlsx");
     }
 
     // ブックをファイルにして、パソコンに保存（ダウンロード）する
@@ -1419,6 +1479,126 @@
       const fileName = makeFileName(shown, profile.full_name);
       await downloadWorkbook(workbook, fileName);
       showMessage("「" + fileName + "」を出力しました。ブラウザの「ダウンロード」フォルダを確認してください。");
+    }
+
+    // ------------------------------------------------------------
+    // PDF出力
+    // 印刷用の勤務表を画面の外（#pdfArea）に組み立て、無料のライブラリ
+    // 「html2canvas」で画像にしてから、「jsPDF」でA4縦のPDFに貼り付けます。
+    // 画像にしてから貼るので、日本語の文字がPDFで文字化けしません。
+    // ------------------------------------------------------------
+
+    // 印刷用の勤務表（HTML）を作る
+    function buildPdfHtml(list, settings, employeeName, status) {
+      const s = countSummary(list);
+      const statusText = status === "submitted" ? "提出済" : "作成中";
+
+      let body = "";
+      list.forEach(function (r) {
+        let rowClass = "";
+        if (r.holidayName) rowClass = "holiday";
+        else if (r.weekday === 0) rowClass = "sunday";
+        else if (r.weekday === 6) rowClass = "saturday";
+
+        const minutes = calcWorkMinutes(r);
+        const working = isWorking(r.type) && r.start && r.end;
+        const remark = [r.holidayName, r.remark.trim()].filter(t => t !== "").join("／");
+
+        body +=
+          '<tr class="' + rowClass + '">' +
+          "<td>" + r.month + "/" + r.day + "</td>" +
+          "<td>" + WEEKDAYS[r.weekday] + "</td>" +
+          "<td>" + escapeHtml(r.type) + "</td>" +
+          "<td>" + (working ? r.start : "") + "</td>" +
+          "<td>" + (working ? r.end : "") + "</td>" +
+          "<td>" + (working ? r.breakMinutes + "分" : "") + "</td>" +
+          "<td>" + (typeof minutes === "number" && isWorking(r.type) ? minutesToText(minutes) : "－") + "</td>" +
+          '<td class="remark">' + escapeHtml(remark) + "</td>" +
+          "</tr>";
+      });
+
+      // 集計欄（画面の集計欄と同じ順番）
+      let summary = "";
+      for (const item of [
+        ["実働時間の合計", minutesToText(totalWorkMinutes(list))],
+        ["月間勤務日数", s.workDays + "日"],
+        ["有給休暇取得日数", s.paidDays + "日（全日 " + s.paidFull + "日・半休 " + s.halfDays + "回）"],
+        ["欠勤日数", s.absentDays + "日"]
+      ]) {
+        summary += "<tr><th>" + item[0] + "</th><td>" + item[1] + "</td></tr>";
+      }
+
+      return (
+        '<p class="pdf-title">' + settings.year + "年" + settings.month + "月 勤務表</p>" +
+        '<div class="pdf-info">' +
+          '<span class="pdf-name">氏名：' + escapeHtml(employeeName) + "</span>" +
+          "<span>状態：" + statusText + "　出力日：" + dateToKey(new Date()).replace(/-/g, "/") + "</span>" +
+        "</div>" +
+        '<div class="pdf-info"><span>基本勤務時間：' + settings.startTime + "〜" + settings.endTime +
+          "（休憩" + settings.breakMinutes + "分）</span></div>" +
+        "<table><thead><tr>" +
+          "<th>日付</th><th>曜日</th><th>勤務区分</th><th>出勤時刻</th><th>退勤時刻</th><th>休憩時間</th><th>実働時間</th><th>備考</th>" +
+        "</tr></thead><tbody>" + body + "</tbody></table>" +
+        '<table class="pdf-summary"><tbody>' + summary + "</tbody></table>" +
+        '<p class="note" style="margin-top:6px;font-size:11px;">※午前休・午後休は有給休暇0.5日として数えています</p>'
+      );
+    }
+
+    // html2canvas と jsPDF が読み込めているかを調べる
+    function pdfReady(boxId) {
+      if (typeof html2canvas === "undefined" || typeof jspdf === "undefined") {
+        showMessage("PDF出力用の部品（html2canvas・jsPDF）を読み込めませんでした。ページを再読み込みしてください。", true, boxId);
+        return false;
+      }
+      return true;
+    }
+
+    // 「PDF出力」ボタン（自分の勤務表）
+    async function exportPdfMine() {
+      if (!shown || rows.length === 0) {
+        showMessage("先に「勤務表を作成する」ボタンで勤務表を作ってください。", true);
+        return;
+      }
+      const errorDays = findErrorDays(rows);
+      if (errorDays.length > 0) {
+        showMessage("赤字の日（" + errorDays.map(r => r.month + "/" + r.day).join("、") + "）を直してから出力してください。", true);
+        return;
+      }
+      if (!pdfReady()) return;
+
+      const button = $("pdfButton");
+      button.disabled = true;  // 作っている間に2回押されないようにする
+      showMessage("PDFを作成しています…");
+      const area = $("pdfArea");
+      try {
+        area.innerHTML = buildPdfHtml(rows, shown, profile.full_name, sheetStatus);
+        // 2倍の細かさで画像にする（PDFで文字がぼやけないように）
+        const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff" });
+
+        // A4縦（210mm × 297mm）、まわりに10mmの余白をとって、はみ出さない大きさで貼る
+        const pdf = new jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const margin = 10;
+        const maxWidth = 210 - margin * 2;
+        const maxHeight = 297 - margin * 2;
+        let width = maxWidth;
+        let height = canvas.height * width / canvas.width;
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = canvas.width * height / canvas.height;
+        }
+        // JPEG で貼る（PNG だとファイルが10MB以上になるため）
+        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (210 - width) / 2, margin, width, height);
+
+        const fileName = makeFileName(shown, profile.full_name, ".pdf");
+        pdf.save(fileName);
+        showMessage("「" + fileName + "」を出力しました。ブラウザの「ダウンロード」フォルダを確認してください。");
+      } catch (err) {
+        console.error(err);
+        showMessage("PDFの作成に失敗しました。もう一度お試しください。", true);
+      } finally {
+        area.innerHTML = "";
+        updateButtons();
+      }
     }
 
     // ------------------------------------------------------------
@@ -1736,6 +1916,7 @@
     $("saveButton").addEventListener("click", saveButtonClicked);
     $("submitButton").addEventListener("click", submitSheet);
     $("excelButton").addEventListener("click", exportMine);
+    $("pdfButton").addEventListener("click", exportPdfMine);
     $("targetMonth").addEventListener("change", loadMonth);
     $("employeeName").addEventListener("change", saveName);
     $("myTab").addEventListener("click", () => switchTab("my"));
@@ -1751,5 +1932,14 @@
     他の人が作った部品なので、vendor/exceljs.min.js は書き換えないでください。
   -->
   <script src="vendor/exceljs.min.js"></script>
+
+  <!--
+    ===== PDF出力用の無料ライブラリ =====
+    ・html2canvas 1.4.1 … 画面の一部を画像にする（https://github.com/niklasvh/html2canvas ・MITライセンス）
+    ・jsPDF 2.5.1 … PDFファイルを作る（https://github.com/parallax/jsPDF ・MITライセンス）
+    どちらも他の人が作った部品なので、vendor/ の中のファイルは書き換えないでください。
+  -->
+  <script src="vendor/html2canvas.min.js"></script>
+  <script src="vendor/jspdf.umd.min.js"></script>
 </body>
 </html>
