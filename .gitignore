@@ -1,0 +1,6 @@
+# 出力したExcelファイル・旧版のバックアップはリポジトリに入れない
+*.xlsx
+backup/
+dist/
+.claude/
+supabase/.temp/

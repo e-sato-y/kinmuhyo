@@ -1,0 +1,16 @@
+# Render の設定ファイル（Blueprint）
+# 公開するのは index.html・config.js・vendor/ だけです（README や SQL は公開しません）
+services:
+  - type: web
+    runtime: static
+    name: kinmuhyo
+    buildCommand: mkdir -p dist && cp -r index.html config.js vendor dist/
+    staticPublishPath: dist
+    headers:
+      # 他のサイトの中に埋め込まれないようにする（なりすまし対策）
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
