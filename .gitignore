@@ -4,3 +4,6 @@ backup/
 dist/
 .claude/
 **/supabase/.temp/
+
+# 鍵・トークンを書いたファイルはリポジトリに入れない
+.env*
