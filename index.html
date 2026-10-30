@@ -1060,7 +1060,8 @@
       .brand { grid-area: brand; padding: 12px 0 6px; font-size: 21px; }
       .user-box { display: contents; }
       .user-box .sep { display: none; }
-      #logoutButton { grid-area: logout; justify-self: end; font-size: 15px; }
+      /* ログアウトの左に細い区切り線 */
+      #logoutButton { grid-area: logout; justify-self: end; font-size: 15px; padding-left: 16px; border-left: 1px solid var(--line); line-height: 22px; }
       #userEmail { grid-area: email; font-size: 13px; color: var(--muted); padding-bottom: 4px; word-break: break-all; }
       .tabs { grid-area: tabs; height: 44px; gap: 0; }
       .tab { padding: 0 18px; font-size: 15px; }
@@ -1073,11 +1074,14 @@
       .auth-card h1 { font-size: 28px; }
 
       /* 年月・状態・保存状態 */
-      .page-head { align-items: center; margin-bottom: 12px; gap: 8px; }
+      /* 年月・状態のしるし・保存状態を1行に並べる */
+      .page-head { align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: nowrap; }
       .eyebrow { display: none; }
-      .title-row { gap: 10px; }
-      .title-row h1 { font-size: 26px; }
-      .save-status { font-size: 13px; }
+      .title-row { gap: 8px; flex-wrap: nowrap; }
+      .title-row h1 { font-size: 24px; white-space: nowrap; }
+      .title-row .badge { font-size: 12px; padding: 2px 8px; }
+      .save-status { font-size: 12px; gap: 6px; white-space: nowrap; }
+      .save-status::before { width: 18px; height: 18px; }
 
       /* 基本設定：要約を出し、「変更」を押すと入力欄を開く */
       .settings-panel { padding: 0; margin-bottom: 16px; }
@@ -1109,8 +1113,11 @@
       .settings-grid .btn { grid-column: 1 / -1; }
 
       .section-head { margin-bottom: 6px; }
-      .section-title { gap: 10px; align-items: center; }
-      .section-title h2 { font-size: 20px; }
+      /* 「日ごとの勤務」と自動保存の案内を1行に並べる */
+      .section-title { gap: 8px; align-items: center; flex-wrap: nowrap; }
+      .section-title h2 { font-size: 19px; white-space: nowrap; }
+      .section-title .hint { font-size: 11px; gap: 5px; }
+      .section-title .info-icon { width: 16px; height: 16px; font-size: 10px; }
       .legend { display: none; }
       .info-row { margin-bottom: 8px; }
 
@@ -1118,31 +1125,34 @@
       .sheet-wrap {
         max-height: none;
         overflow: visible;   /* 表全体はページと一緒に縦にスクロールする */
-        border-radius: 6px;
+        border-radius: 4px;
+        margin: 0 -6px;      /* 左右の余白を詰めて、表の幅を広くとる */
       }
       .sheet { font-size: 11.5px; }
       /* 列の幅（スマホ）。合計100% */
-      .sheet col.c-date  { width: 11.5%; }
-      .sheet col.c-week  { width: 5.5%; }
-      .sheet col.c-type  { width: 18%; }
-      .sheet col.c-start { width: 13%; }
-      .sheet col.c-end   { width: 13%; }
-      .sheet col.c-break { width: 8.5%; }
-      .sheet col.c-work  { width: 11%; }
-      .sheet col.c-remark{ width: 19.5%; }
+      .sheet col.c-date  { width: 12%; }
+      .sheet col.c-week  { width: 6%; }
+      .sheet col.c-type  { width: 17.5%; }
+      .sheet col.c-start { width: 12.5%; }
+      .sheet col.c-end   { width: 12.5%; }
+      .sheet col.c-break { width: 9%; }
+      .sheet col.c-work  { width: 12%; }
+      .sheet col.c-remark{ width: 18.5%; }
       .sheet th {
         font-size: 11px;
         padding: 6px 1px;
         line-height: 1.2;
         white-space: normal;
       }
-      .sheet th small { display: block; font-size: 9.5px; font-weight: 400; color: var(--muted); }
+      .sheet th { white-space: nowrap; }
+      /* 「休憩分」は列が細いので、文字の間を少し詰めて1行に収める */
+      .sheet th .label-short.tight { font-size: 10.5px; letter-spacing: -0.06em; }
       .label-long { display: none; }
       .label-short { display: inline; }
-      .sheet td { padding: 4px 2px; }
+      .sheet td { padding: 3px 2px; }
       .sheet input,
       .sheet select {
-        height: 28px;
+        height: 26px;
         font-size: 11.5px;
         padding: 0 2px;
         border-radius: 4px;
@@ -1164,9 +1174,25 @@
       .break-wrap input { border-radius: 4px; }
       .work-time { font-size: 12px; }
       .work-time.error { font-size: 9.5px; line-height: 1.15; word-break: break-all; }
+      /* 働かない日の実働は、灰色の枠の中に「--」を出す（行の色はそのまま残す） */
+      .off-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 26px;
+        border-radius: 4px;
+        background: #eef1f4;
+        font-size: 10px;
+      }
       .holiday-name { font-size: 9.5px; }
-      .today-badge { display: none; }
+      /* 今日のしるし（スマホでは小さく。入りきらないときは日付の下に回る） */
+      .today-badge { font-size: 8.5px; padding: 0 3px; margin-left: 2px; vertical-align: 1px; }
+      .sheet td.col-date { white-space: normal; line-height: 1.3; }
       .sheet tr.today td:first-child { box-shadow: inset 3px 0 0 var(--navy); }
+      /* 集計の下の注意書きは、短く中央に */
+      .after-summary { justify-content: center; }
+      .after-summary .hint { font-size: 12px; }
+      .after-summary .info-icon { display: none; }
       .cell-text { font-size: 11.5px; word-break: break-all; }
 
       /* 月間集計：2列×2段 */
@@ -1438,7 +1464,7 @@
                   <th><span class="label-long">勤務区分</span><span class="label-short">区分</span></th>
                   <th><span class="label-long">出勤時刻</span><span class="label-short">出勤</span></th>
                   <th><span class="label-long">退勤時刻</span><span class="label-short">退勤</span></th>
-                  <th><span class="label-long">休憩時間</span><span class="label-short">休憩<small>分</small></span></th>
+                  <th><span class="label-long">休憩時間</span><span class="label-short tight">休憩分</span></th>
                   <th><span class="label-long">実働時間</span><span class="label-short">実働</span></th>
                   <th>備考</th>
                 </tr>
@@ -1451,9 +1477,9 @@
         <!-- 4. 月間集計 -->
         <section id="mySummary" class="panel summary-panel hidden" aria-label="今月の集計"></section>
         <div class="after-summary">
-          <p class="hint"><i class="info-icon">i</i>提出後は編集できなくなります。内容を確認してから提出してください。</p>
-          <!-- スマホでは、PDF出力はここに表示します（画面下のボタンは3つに絞っています） -->
-          <button type="button" class="btn btn-outline btn-small pdf-button sp-only">PDF出力</button>
+          <p class="hint pc-only"><i class="info-icon">i</i>提出後は編集できなくなります。内容を確認してから提出してください。</p>
+          <!-- スマホでは短い一文だけにする（PDF出力はパソコンの画面で行います） -->
+          <p class="hint sp-only">提出後は編集できなくなります。</p>
         </div>
       </section>
 
@@ -1556,7 +1582,7 @@
                     <th><span class="label-long">勤務区分</span><span class="label-short">区分</span></th>
                     <th><span class="label-long">出勤時刻</span><span class="label-short">出勤</span></th>
                     <th><span class="label-long">退勤時刻</span><span class="label-short">退勤</span></th>
-                    <th><span class="label-long">休憩時間</span><span class="label-short">休憩<small>分</small></span></th>
+                    <th><span class="label-long">休憩時間</span><span class="label-short tight">休憩分</span></th>
                     <th><span class="label-long">実働時間</span><span class="label-short">実働</span></th>
                     <th>備考</th>
                   </tr>
@@ -2056,7 +2082,9 @@
           cell.textContent = minutesToText(result);
           cell.className = "work-time num";
         } else {
-          cell.textContent = "--:--";
+          // 働かない日は「--:--」（スマホでは灰色の枠の中に表示）
+          cell.textContent = "";
+          cell.append(el("span", "off-box", "--:--"));
           cell.className = "work-time num off";
         }
       });
