@@ -829,6 +829,9 @@
     }
     .admin-controls .input { width: 200px; height: 44px; font-size: 17px; }
     .admin-controls .btn { min-height: 44px; }
+    /* 前月・翌月ボタンと年月 */
+    .month-step { display: flex; gap: 6px; align-items: center; }
+    .month-step .btn { width: 44px; padding: 0; font-size: 22px; }
 
     /* 管理者画面のパネルは、角を少し丸くして影を付ける */
     #adminView .panel {
@@ -1032,6 +1035,97 @@
       margin: 8px 0 20px;
       font-size: 13px;
       color: var(--muted);
+    }
+
+    /* ===== 管理者画面：わざとダサい見た目 ===== */
+    /* このかたまりを消すと、もとの見た目に戻ります */
+    #adminView {
+      font-family: "Comic Sans MS", "HGP創英角ﾎﾟｯﾌﾟ体", "HG創英角ﾎﾟｯﾌﾟ体", "Meiryo", cursive;
+      background: repeating-linear-gradient(45deg, #ffff66 0 20px, #ff99ff 20px 40px);
+      border: 6px ridge #00ccff;
+      padding: 16px;
+    }
+    #adminView h1 {
+      color: #ff0000;
+      text-shadow: 3px 3px 0 #00ff00, 6px 6px 0 #0000ff;
+      animation: dasai-blink 1s steps(2) infinite;
+    }
+    #adminView h1::before { content: "★☆★ "; }
+    #adminView h1::after { content: " ★☆★"; }
+    #adminView .sub {
+      color: #000;
+      background: #00ffff;
+      padding: 2px 6px;
+      font-weight: 700;
+    }
+    #adminView .panel {
+      background: #ffffcc;
+      border: 4px dashed #ff6600;
+      box-shadow: 8px 8px 0 #9900ff;
+    }
+    #adminView .btn,
+    #adminView .chip {
+      background: linear-gradient(#ffff00, #ff9900);
+      color: #0000cc;
+      border: 3px outset #ff00ff;
+      font-weight: 700;
+    }
+    #adminView .chip.active { background: linear-gradient(#ff00ff, #6600ff); color: #ffff00; border-style: inset; }
+    #adminView .btn:disabled { opacity: 0.5; }
+    #adminView .stat-value { color: #ff0066; font-size: 34px; }
+    #adminView .admin-table th { background: #0000ff; color: #ffff00; }
+    #adminView .admin-table tr:nth-child(odd) td { background: #ccffcc; }
+    #adminView .admin-table tr:nth-child(even) td { background: #ffccff; }
+    #adminView .person-name { color: #cc0000; text-decoration: underline wavy #00aa00; }
+    /* さらにダサく */
+    #adminView { cursor: crosshair; position: relative; overflow: hidden; }
+    #adminView::before {
+      /* 上を流れる電光掲示板 */
+      content: "☆★☆ ようこそ管理者さま!!! 勤務表ちゃんと出してね(^o^)/ ☆★☆ キリ番ゲッターは掲示板に書き込んでね♪ ☆★☆ ご意見・ご感想お待ちしてます m(_ _)m ☆★☆";
+      display: block;
+      white-space: nowrap;
+      margin: -16px -16px 12px;
+      padding: 4px 0;
+      background: #000;
+      color: #00ff00;
+      font-family: "MS Gothic", "ＭＳ ゴシック", monospace;
+      font-weight: 700;
+      animation: dasai-marquee 12s linear infinite;
+    }
+    #adminView h1 {
+      background: linear-gradient(90deg, red, orange, yellow, lime, cyan, blue, magenta, red);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: none;
+      filter: drop-shadow(3px 3px 0 #000);
+      animation: dasai-rainbow 2s linear infinite;
+      font-size: 34px;
+    }
+    #adminView h1::before { content: "🌟💖✨ "; -webkit-text-fill-color: initial; }
+    #adminView h1::after { content: " ✨💖🌟"; -webkit-text-fill-color: initial; }
+    #adminView .sub::before { content: "🆕NEW!! "; color: #ff0000; }
+    #adminView .stats { transform: rotate(-1deg); }
+    #adminView .filter-row { transform: rotate(0.8deg); }
+    #adminView .stat-label::before { content: "▼"; color: #ff00ff; }
+    #adminView .stat-value { font-family: Impact, "Arial Black", sans-serif; text-shadow: 2px 2px 0 #ffff00, 4px 4px 0 #00ffff; }
+    #adminView .btn:hover,
+    #adminView .chip:hover { animation: dasai-shake 0.2s linear infinite; }
+    #adminView .badge { border: 2px dotted #000; font-size: 13px; transform: rotate(-4deg); display: inline-block; }
+    #adminView .badge.submitted::after { content: " 🎉"; }
+    #adminView .badge.none::after { content: " 😱"; }
+    #adminView .badge.draft::after { content: " ✏️"; }
+    #adminView .admin-table { border: 5px double #ff0000; }
+    #adminView .admin-table th { font-family: "Comic Sans MS", cursive; letter-spacing: 2px; }
+    #adminView .admin-foot { color: #ff0000; font-weight: 700; }
+    #adminView .admin-foot::after { content: "あなたは 000123 人目の訪問者です"; margin-left: 12px; background: #000; color: #ff3333; font-family: monospace; padding: 2px 6px; }
+    @keyframes dasai-blink { 50% { opacity: 0.4; } }
+    @keyframes dasai-marquee { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
+    @keyframes dasai-rainbow { to { background-position: 200% 0; } }
+    @keyframes dasai-shake { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #adminView h1, #adminView::before, #adminView .btn:hover, #adminView .chip:hover { animation: none; }
     }
 
     /* 社員の一覧（スマホはカード） */
@@ -1334,6 +1428,8 @@
       .admin-controls { display: grid; gap: 10px; }
       .admin-controls .input { width: 100%; }
       .admin-controls .btn { width: 100%; }
+      .month-step .input { flex: 1; min-width: 0; }
+      .month-step .btn { width: 44px; flex: none; }
       .stats { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
       .stat { padding: 12px; gap: 10px; }
       .stat-icon { width: 38px; height: 38px; border-radius: 10px; }
@@ -1600,7 +1696,12 @@
             <p class="sub">社員ごとの勤務表を確認・出力できます。</p>
           </div>
           <div class="admin-controls">
-            <input type="month" id="adminMonth" class="input" aria-label="対象年月">
+            <div class="month-step">
+              <button type="button" id="adminPrevMonth" class="btn btn-outline" aria-label="前月">‹</button>
+              <input type="month" id="adminMonth" class="input" aria-label="対象年月">
+              <button type="button" id="adminNextMonth" class="btn btn-outline" aria-label="翌月">›</button>
+            </div>
+            <button type="button" id="adminCopyUnsubmitted" class="btn btn-outline">未提出者のメールをコピー</button>
             <button type="button" id="adminExportAllButton" class="btn btn-excel"><span class="xl-icon" aria-hidden="true">X</span>全員分をExcel出力</button>
           </div>
         </div>
@@ -3345,7 +3446,8 @@
     async function reopenSheet(a) {
       if (a.status !== "submitted") return;
       const { year, month } = adminMonthShown;
-      if (!confirm(a.person.full_name + " さんの " + year + "年" + month + "月の勤務表を差し戻します。よろしいですか？")) return;
+      const name = a.person.full_name || a.person.email || "（氏名未設定）";
+      if (!confirm(name + " さんの " + year + "年" + month + "月の勤務表を差し戻します。よろしいですか？")) return;
       const { data, error } = await sb.from("timesheets")
         .update({ status: "draft" })
         .eq("user_id", a.person.id)
@@ -3357,7 +3459,32 @@
         return;
       }
       await loadAdmin();
-      showMessage(a.person.full_name + " さんの勤務表を差し戻しました。", false, "adminMessage");
+      showMessage(name + " さんの勤務表を差し戻しました。", false, "adminMessage");
+    }
+
+    // 対象年月を1ヶ月ずらして読み込み直す（-1：前月、1：翌月）
+    function stepAdminMonth(diff) {
+      const value = $("adminMonth").value || thisMonth;
+      const [year, month] = value.split("-").map(Number);
+      const d = new Date(year, month - 1 + diff, 1);
+      $("adminMonth").value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      loadAdmin();
+    }
+
+    // 未提出（未作成・作成中）の人のメールアドレスを、督促メールの宛先に貼れる形でコピーする
+    async function copyUnsubmittedEmails() {
+      const emails = adminList.filter(a => a.status !== "submitted" && a.person.email).map(a => a.person.email);
+      if (!adminMonthShown || emails.length === 0) {
+        showMessage("未提出の人はいません。", false, "adminMessage");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(emails.join(", "));
+        showMessage("未提出の " + emails.length + "人のメールアドレスをコピーしました。", false, "adminMessage");
+      } catch (err) {
+        console.error(err);
+        showMessage("コピーできませんでした。ブラウザの設定をご確認ください。", true, "adminMessage");
+      }
     }
 
     // ------------------------------------------------------------
@@ -3578,6 +3705,9 @@
     $("myTab").addEventListener("click", () => switchTab("my"));
     $("adminTab").addEventListener("click", () => switchTab("admin"));
     $("adminMonth").addEventListener("change", loadAdmin);
+    $("adminPrevMonth").addEventListener("click", () => stepAdminMonth(-1));
+    $("adminNextMonth").addEventListener("click", () => stepAdminMonth(1));
+    $("adminCopyUnsubmitted").addEventListener("click", copyUnsubmittedEmails);
     $("adminExportAllButton").addEventListener("click", exportAll);
     $("adminChips").addEventListener("click", function (e) {
       const chip = e.target.closest(".chip");
